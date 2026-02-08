@@ -417,5 +417,13 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
+# Runtime data (config files)
+data/
+!data/.gitkeep
+
+# JetBrains Rider
+.idea/
+**/.idea/
+
 # Claude
 .claude/

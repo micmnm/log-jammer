@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="LogJammer.Api/LogJammer.Api.csproj" />
+  <Project Path="LogJammer.Core/LogJammer.Core.csproj" />
+  <Project Path="LogJammer.Infrastructure/LogJammer.Infrastructure.csproj" />
+  <Project Path="LogJammer.Tests/LogJammer.Tests.csproj" />
+</Solution>
