@@ -164,6 +164,29 @@
 | CreatedAt | DateTime | created_at | auto-set |
 | ReviewedAt | DateTime? | reviewed_at | |
 
+### ClassificationConfig
+`LogJammer.Core.Entities.ClassificationConfig` → `classification_config`
+
+| Property | Type | DB Column | Notes |
+|----------|------|-----------|-------|
+| Id | Guid | id | PK, auto-generated |
+| Key | string | key | max 100, unique index |
+| Value | string | value | max 500 |
+| Description | string? | description | max 500 |
+| CreatedAt | DateTime | created_at | auto-set |
+| UpdatedAt | DateTime | updated_at | auto-set |
+
+### TagCentroid
+`LogJammer.Core.Entities.TagCentroid` → `tag_centroids`
+
+| Property | Type | DB Column | Notes |
+|----------|------|-----------|-------|
+| Id | Guid | id | PK, auto-generated |
+| TagId | Guid | tag_id | FK → tags, unique index |
+| CentroidVector | Vector? | centroid_vector | vector(384) |
+| ErrorCount | int | error_count | |
+| UpdatedAt | DateTime | updated_at | auto-set |
+
 ---
 
 ## Models (Pipeline)
@@ -233,6 +256,41 @@
 `LogJammer.Core.Interfaces.ISpikeDetector`
 - `EvaluateAsync(knownErrorId)` → `Task<SpikeResult?>`
 
+### IClassificationService
+`LogJammer.Core.Interfaces.IClassificationService`
+- `ClassifyAsync(error)` → `Task<ClassificationResult>`
+- `RecalculateTagCentroidAsync(tagId)` → `Task`
+- `RecalculateAllCentroidsAsync()` → `Task`
+
+### IClassificationConfigRepository
+`LogJammer.Core.Interfaces.IClassificationConfigRepository`
+- `GetAsync(key)` → `Task<ClassificationConfig?>`
+- `GetAllAsync()` → `Task<IReadOnlyList<ClassificationConfig>>`
+- `UpsertAsync(key, value, description?)` → `Task<ClassificationConfig>`
+
+### IClassificationQueueRepository
+`LogJammer.Core.Interfaces.IClassificationQueueRepository`
+- `GetPendingAsync(page, pageSize)` → `Task<IReadOnlyList<ClassificationQueueItem>>`
+- `GetPendingCountAsync()` → `Task<int>`
+- `GetByIdAsync(id)` → `Task<ClassificationQueueItem?>`
+- `UpdateAsync(item)` → `Task`
+- `GetUnprocessedAsync(batchSize)` → `Task<IReadOnlyList<ClassificationQueueItem>>`
+
+### IUserOverrideRepository
+`LogJammer.Core.Interfaces.IUserOverrideRepository`
+- `AddAsync(override)` → `Task<UserOverride>`
+- `GetByKnownErrorAsync(knownErrorId)` → `Task<IReadOnlyList<UserOverride>>`
+- `GetByKnownErrorAndTypeAsync(knownErrorId, type)` → `Task<UserOverride?>`
+
+### ITagRepository
+`LogJammer.Core.Interfaces.ITagRepository`
+- `GetAllAsync()` → `Task<IReadOnlyList<Tag>>`
+- `GetByIdAsync(id)` → `Task<Tag?>`
+- `GetByNameAsync(name)` → `Task<Tag?>`
+- `AddAsync(tag)` → `Task<Tag>`
+- `UpdateAsync(tag)` → `Task`
+- `DeleteAsync(tag)` → `Task`
+
 ---
 
 ## Models (Records)
@@ -268,3 +326,16 @@
 - `ThresholdValue` → `double`
 - `ActualValue` → `double`
 - `IsSpike` → `bool`
+
+### ClassificationResult
+`LogJammer.Core.Models.ClassificationResult`
+- `MatchedErrorGroupId` → `Guid?`
+- `SimilarityScore` → `double`
+- `SuggestedTags` → `IReadOnlyList<TagSuggestion>`
+- `NeedsReview` → `bool`
+
+### TagSuggestion
+`LogJammer.Core.Models.TagSuggestion`
+- `TagId` → `Guid`
+- `TagName` → `string`
+- `Confidence` → `double`

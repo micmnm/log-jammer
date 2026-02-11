@@ -87,6 +87,47 @@ namespace LogJammer.Infrastructure.Data.Migrations
                     b.ToTable("alerts", (string)null);
                 });
 
+            modelBuilder.Entity("LogJammer.Core.Entities.ClassificationConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("classification_config", (string)null);
+                });
+
             modelBuilder.Entity("LogJammer.Core.Entities.ClassificationQueueItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -402,6 +443,38 @@ namespace LogJammer.Infrastructure.Data.Migrations
                     b.ToTable("tags", (string)null);
                 });
 
+            modelBuilder.Entity("LogJammer.Core.Entities.TagCentroid", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Vector>("CentroidVector")
+                        .HasColumnType("vector(384)")
+                        .HasColumnName("centroid_vector");
+
+                    b.Property<int>("ErrorCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("error_count");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tag_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TagId")
+                        .IsUnique();
+
+                    b.ToTable("tag_centroids", (string)null);
+                });
+
             modelBuilder.Entity("LogJammer.Core.Entities.UserOverride", b =>
                 {
                     b.Property<Guid>("Id")
@@ -513,6 +586,17 @@ namespace LogJammer.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("DataSource");
+                });
+
+            modelBuilder.Entity("LogJammer.Core.Entities.TagCentroid", b =>
+                {
+                    b.HasOne("LogJammer.Core.Entities.Tag", "Tag")
+                        .WithOne()
+                        .HasForeignKey("LogJammer.Core.Entities.TagCentroid", "TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tag");
                 });
 
             modelBuilder.Entity("LogJammer.Core.Entities.UserOverride", b =>

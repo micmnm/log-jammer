@@ -44,17 +44,27 @@ Base URL: `http://localhost:5000`
 
 | Method | Path | Description | Status |
 |--------|------|-------------|--------|
-| GET | `/api/tags` | List all tags | Skeleton (501) |
-| POST | `/api/tags` | Create a tag | Skeleton (501) |
-| PUT | `/api/tags/{id}` | Update a tag | Skeleton (501) |
-| DELETE | `/api/tags/{id}` | Delete a tag | Skeleton (501) |
+| GET | `/api/tags` | List all tags | Implemented |
+| GET | `/api/tags/{id}` | Get tag by ID | Implemented |
+| POST | `/api/tags` | Create a tag | Implemented |
+| PUT | `/api/tags/{id}` | Update a tag | Implemented |
+| DELETE | `/api/tags/{id}` | Delete a tag | Implemented |
 
 ## Configuration
 
 | Method | Path | Description | Status |
 |--------|------|-------------|--------|
-| GET | `/api/configuration` | Get app configuration | Skeleton (501) |
-| PUT | `/api/configuration` | Update app configuration | Skeleton (501) |
+| GET | `/api/configuration` | Get all classification config key/values | Implemented |
+| PUT | `/api/configuration` | Update a configuration value | Implemented |
+
+## Classification Queue
+
+| Method | Path | Description | Status |
+|--------|------|-------------|--------|
+| GET | `/api/classification/queue` | List pending classification items (query: page, pageSize) | Implemented |
+| GET | `/api/classification/queue/{id}` | Get single classification queue item | Implemented |
+| POST | `/api/classification/queue/{id}/approve` | Accept suggested tags | Implemented |
+| POST | `/api/classification/queue/{id}/reject` | Reject with user-provided tags | Implemented |
 
 ## OpenAPI
 

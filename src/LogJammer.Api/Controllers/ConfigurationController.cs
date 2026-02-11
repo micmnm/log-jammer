@@ -1,14 +1,24 @@
+using LogJammer.Api.Dtos;
+using LogJammer.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LogJammer.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class ConfigurationController : ControllerBase
+public class ConfigurationController(IConfigurationService configService) : ControllerBase
 {
     [HttpGet]
-    public IActionResult Get() => StatusCode(501, "Not implemented");
+    public async Task<ActionResult<IReadOnlyList<ConfigurationResponse>>> Get(CancellationToken cancellationToken = default)
+    {
+        var configs = await configService.GetAllAsync(cancellationToken);
+        return Ok(configs);
+    }
 
     [HttpPut]
-    public IActionResult Update() => StatusCode(501, "Not implemented");
+    public async Task<ActionResult<ConfigurationResponse>> Update([FromBody] UpdateConfigurationRequest request, CancellationToken cancellationToken = default)
+    {
+        var config = await configService.UpdateAsync(request, cancellationToken);
+        return Ok(config);
+    }
 }

@@ -16,6 +16,8 @@ public class LogJammerDbContext : DbContext
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<UserOverride> UserOverrides => Set<UserOverride>();
     public DbSet<ClassificationQueueItem> ClassificationQueue => Set<ClassificationQueueItem>();
+    public DbSet<ClassificationConfig> ClassificationConfigs => Set<ClassificationConfig>();
+    public DbSet<TagCentroid> TagCentroids => Set<TagCentroid>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
