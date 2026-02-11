@@ -14,6 +14,10 @@ builder.Services.AddDataSourceAdapters();
 
 // Services
 builder.Services.AddScoped<LogJammer.Api.Services.IDataSourceService, LogJammer.Api.Services.DataSourceService>();
+builder.Services.AddScoped<LogJammer.Api.Services.IErrorGroupService, LogJammer.Api.Services.ErrorGroupService>();
+
+// Pipeline (repos, mapper, calculator, background services)
+builder.Services.AddPipelineServices();
 
 // OpenAPI
 builder.Services.AddOpenApi();

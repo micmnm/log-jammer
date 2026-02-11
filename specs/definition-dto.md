@@ -166,7 +166,42 @@
 
 ---
 
+## Models (Pipeline)
+
+### MappedLogEntry
+`LogJammer.Core.Models.MappedLogEntry`
+- `Message` → `string`
+- `Timestamp` → `DateTime`
+- `Severity` → `ErrorSeverity?`
+- `StackTrace` → `string?`
+- `CustomFields` → `Dictionary<string, object?>`
+
+---
+
 ## Interfaces
+
+### ISchemaMapper
+`LogJammer.Core.Interfaces.ISchemaMapper`
+- `Map(entry, schemaMappingJson?)` → `MappedLogEntry`
+
+### IFingerprintCalculator
+`LogJammer.Core.Interfaces.IFingerprintCalculator`
+- `ComputeFingerprint(entry, configs)` → `string`
+
+### IKnownErrorRepository
+`LogJammer.Core.Interfaces.IKnownErrorRepository`
+- `GetByFingerprintHashAsync(fingerprintHash)` → `Task<KnownError?>`
+- `GetAllAsync(dataSourceId?, status?, severity?, page, pageSize)` → `Task<IReadOnlyList<KnownError>>`
+- `GetCountAsync(dataSourceId?, status?, severity?)` → `Task<int>`
+- `GetByIdAsync(id)` → `Task<KnownError?>`
+- `AddAsync(knownError)` → `Task<KnownError>`
+- `UpdateAsync(knownError)` → `Task`
+
+### IErrorOccurrenceRepository
+`LogJammer.Core.Interfaces.IErrorOccurrenceRepository`
+- `UpsertWindowAsync(knownErrorId, windowStart, windowEnd, sampleRatio?)` → `Task`
+- `GetByKnownErrorAsync(knownErrorId, from?, to?)` → `Task<IReadOnlyList<ErrorOccurrence>>`
+- `DeleteOlderThanAsync(cutoff)` → `Task<int>`
 
 ### IDataSourceAdapter
 `LogJammer.Core.Interfaces.IDataSourceAdapter`

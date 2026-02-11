@@ -26,11 +26,11 @@ Base URL: `http://localhost:5000`
 
 | Method | Path | Description | Status |
 |--------|------|-------------|--------|
-| GET | `/api/errorgroups` | List all error groups | Skeleton (501) |
-| GET | `/api/errorgroups/{id}` | Get error group by ID | Skeleton (501) |
-| GET | `/api/errorgroups/{id}/occurrences` | Get occurrence history | Skeleton (501) |
-| PUT | `/api/errorgroups/{id}/status` | Update error group status | Skeleton (501) |
-| PUT | `/api/errorgroups/{id}/severity` | Update error group severity | Skeleton (501) |
+| GET | `/api/errorgroups` | List error groups (query: dataSourceId, status, severity, page, pageSize) | Implemented |
+| GET | `/api/errorgroups/{id}` | Get error group detail by ID | Implemented |
+| GET | `/api/errorgroups/{id}/occurrences` | Get occurrence history (query: from, to) | Implemented |
+| PUT | `/api/errorgroups/{id}/status` | Update error group status | Implemented |
+| PUT | `/api/errorgroups/{id}/severity` | Update error group severity | Implemented |
 
 ## Alerts
 
