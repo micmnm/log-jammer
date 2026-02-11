@@ -136,6 +136,37 @@
 | LastNotifiedAt | DateTime? | last_notified_at | |
 | AcknowledgedAt | DateTime? | acknowledged_at | |
 | ResolvedAt | DateTime? | resolved_at | |
+| ConsecutiveBelowThreshold | int | consecutive_below_threshold | auto-resolve tracking |
+| CreatedAt | DateTime | created_at | auto-set |
+| UpdatedAt | DateTime | updated_at | auto-set |
+
+### SpikeDetectionRule
+`LogJammer.Core.Entities.SpikeDetectionRule` → `spike_detection_rules`
+
+| Property | Type | DB Column | Notes |
+|----------|------|-----------|-------|
+| Id | Guid | id | PK |
+| KnownErrorId | Guid? | known_error_id | FK → known_errors, unique, null = global default |
+| ThresholdType | ThresholdType | threshold_type | stored as string |
+| ThresholdValue | double | threshold_value | |
+| WindowMinutes | int | window_minutes | evaluation window (default 5) |
+| LookbackMinutes | int | lookback_minutes | baseline lookback (default 1440 = 24h) |
+| Enabled | bool | enabled | default true |
+| CreatedAt | DateTime | created_at | auto-set |
+| UpdatedAt | DateTime | updated_at | auto-set |
+
+### CorrelatedSpikeAlert
+`LogJammer.Core.Entities.CorrelatedSpikeAlert` → `correlated_spike_alerts`
+
+| Property | Type | DB Column | Notes |
+|----------|------|-----------|-------|
+| Id | Guid | id | PK |
+| DataSourceId | Guid | data_source_id | FK → data_sources |
+| Status | AlertStatus | status | stored as string |
+| AlertIds | string | alert_ids | JSON array of related Alert Ids |
+| GroupCount | int | group_count | number of groups that spiked |
+| DetectedAt | DateTime | detected_at | |
+| ResolvedAt | DateTime? | resolved_at | |
 | CreatedAt | DateTime | created_at | auto-set |
 | UpdatedAt | DateTime | updated_at | auto-set |
 
@@ -255,6 +286,43 @@
 ### ISpikeDetector
 `LogJammer.Core.Interfaces.ISpikeDetector`
 - `EvaluateAsync(knownErrorId)` → `Task<SpikeResult?>`
+
+### IAlertRepository
+`LogJammer.Core.Interfaces.IAlertRepository`
+- `GetActiveByKnownErrorIdAsync(knownErrorId)` → `Task<Alert?>`
+- `GetAllAsync(status?, dataSourceId?, page, pageSize)` → `Task<IReadOnlyList<Alert>>`
+- `GetCountAsync(status?, dataSourceId?)` → `Task<int>`
+- `GetByIdAsync(id)` → `Task<Alert?>`
+- `AddAsync(alert)` → `Task<Alert>`
+- `UpdateAsync(alert)` → `Task`
+- `GetRecentByDataSourceAsync(dataSourceId, since)` → `Task<IReadOnlyList<Alert>>`
+
+### ISpikeDetectionRuleRepository
+`LogJammer.Core.Interfaces.ISpikeDetectionRuleRepository`
+- `GetByKnownErrorIdAsync(knownErrorId?)` → `Task<SpikeDetectionRule?>`
+- `GetGlobalDefaultAsync()` → `Task<SpikeDetectionRule?>`
+- `GetByIdAsync(id)` → `Task<SpikeDetectionRule?>`
+- `GetAllAsync()` → `Task<IReadOnlyList<SpikeDetectionRule>>`
+- `AddAsync(rule)` → `Task<SpikeDetectionRule>`
+- `UpdateAsync(rule)` → `Task`
+- `DeleteAsync(id)` → `Task`
+
+### ICorrelatedSpikeAlertRepository
+`LogJammer.Core.Interfaces.ICorrelatedSpikeAlertRepository`
+- `GetAllAsync(status?, page, pageSize)` → `Task<IReadOnlyList<CorrelatedSpikeAlert>>`
+- `GetActiveByDataSourceIdAsync(dataSourceId)` → `Task<CorrelatedSpikeAlert?>`
+- `AddAsync(alert)` → `Task<CorrelatedSpikeAlert>`
+- `UpdateAsync(alert)` → `Task`
+
+### IAlertManager
+`LogJammer.Core.Interfaces.IAlertManager`
+- `ProcessSpikeResultAsync(result, dataSourceId)` → `Task`
+- `AcknowledgeAsync(alertId)` → `Task`
+- `ResolveAsync(alertId)` → `Task`
+
+### ICorrelationDetector
+`LogJammer.Core.Interfaces.ICorrelationDetector`
+- `DetectAsync(dataSourceId)` → `Task`
 
 ### IClassificationService
 `LogJammer.Core.Interfaces.IClassificationService`

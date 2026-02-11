@@ -40,6 +40,10 @@ namespace LogJammer.Infrastructure.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("actual_value");
 
+                    b.Property<int>("ConsecutiveBelowThreshold")
+                        .HasColumnType("integer")
+                        .HasColumnName("consecutive_below_threshold");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -168,6 +172,56 @@ namespace LogJammer.Infrastructure.Data.Migrations
                         .HasFilter("reviewed = false");
 
                     b.ToTable("classification_queue", (string)null);
+                });
+
+            modelBuilder.Entity("LogJammer.Core.Entities.CorrelatedSpikeAlert", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AlertIds")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("alert_ids");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DataSourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("data_source_id");
+
+                    b.Property<DateTime>("DetectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("detected_at");
+
+                    b.Property<int>("GroupCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("group_count");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DataSourceId");
+
+                    b.ToTable("correlated_spike_alerts", (string)null);
                 });
 
             modelBuilder.Entity("LogJammer.Core.Entities.DataSource", b =>
@@ -406,6 +460,56 @@ namespace LogJammer.Infrastructure.Data.Migrations
                     b.ToTable("known_errors", (string)null);
                 });
 
+            modelBuilder.Entity("LogJammer.Core.Entities.SpikeDetectionRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<Guid?>("KnownErrorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("known_error_id");
+
+                    b.Property<int>("LookbackMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("lookback_minutes");
+
+                    b.Property<string>("ThresholdType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("threshold_type");
+
+                    b.Property<double>("ThresholdValue")
+                        .HasColumnType("double precision")
+                        .HasColumnName("threshold_value");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("WindowMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("window_minutes");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KnownErrorId")
+                        .IsUnique();
+
+                    b.ToTable("spike_detection_rules", (string)null);
+                });
+
             modelBuilder.Entity("LogJammer.Core.Entities.Tag", b =>
                 {
                     b.Property<Guid>("Id")
@@ -536,6 +640,17 @@ namespace LogJammer.Infrastructure.Data.Migrations
                     b.Navigation("KnownError");
                 });
 
+            modelBuilder.Entity("LogJammer.Core.Entities.CorrelatedSpikeAlert", b =>
+                {
+                    b.HasOne("LogJammer.Core.Entities.DataSource", "DataSource")
+                        .WithMany()
+                        .HasForeignKey("DataSourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DataSource");
+                });
+
             modelBuilder.Entity("LogJammer.Core.Entities.ErrorOccurrence", b =>
                 {
                     b.HasOne("LogJammer.Core.Entities.KnownError", "KnownError")
@@ -586,6 +701,16 @@ namespace LogJammer.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("DataSource");
+                });
+
+            modelBuilder.Entity("LogJammer.Core.Entities.SpikeDetectionRule", b =>
+                {
+                    b.HasOne("LogJammer.Core.Entities.KnownError", "KnownError")
+                        .WithMany()
+                        .HasForeignKey("KnownErrorId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("KnownError");
                 });
 
             modelBuilder.Entity("LogJammer.Core.Entities.TagCentroid", b =>

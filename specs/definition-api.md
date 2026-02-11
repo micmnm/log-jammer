@@ -36,9 +36,21 @@ Base URL: `http://localhost:5000`
 
 | Method | Path | Description | Status |
 |--------|------|-------------|--------|
-| GET | `/api/alerts` | List all alerts | Skeleton (501) |
-| GET | `/api/alerts/{id}` | Get alert by ID | Skeleton (501) |
-| POST | `/api/alerts/{id}/acknowledge` | Acknowledge an alert | Skeleton (501) |
+| GET | `/api/alerts` | List alerts (query: status, dataSourceId, page, pageSize) | Implemented |
+| GET | `/api/alerts/{id}` | Get alert by ID | Implemented |
+| POST | `/api/alerts/{id}/acknowledge` | Acknowledge an alert | Implemented |
+| GET | `/api/alerts/history` | List resolved alerts (query: dataSourceId, page, pageSize) | Implemented |
+| GET | `/api/alerts/correlated` | List correlated spike alerts (query: status, page, pageSize) | Implemented |
+
+## Spike Detection Rules
+
+| Method | Path | Description | Status |
+|--------|------|-------------|--------|
+| GET | `/api/spikedetectionrules` | List all rules | Implemented |
+| GET | `/api/spikedetectionrules/{id}` | Get rule by ID | Implemented |
+| POST | `/api/spikedetectionrules` | Create a rule | Implemented |
+| PUT | `/api/spikedetectionrules/{id}` | Update a rule | Implemented |
+| DELETE | `/api/spikedetectionrules/{id}` | Delete a rule | Implemented |
 
 ## Tags
 

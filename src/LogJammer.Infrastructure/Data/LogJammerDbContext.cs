@@ -14,6 +14,8 @@ public class LogJammerDbContext : DbContext
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<ErrorTag> ErrorTags => Set<ErrorTag>();
     public DbSet<Alert> Alerts => Set<Alert>();
+    public DbSet<SpikeDetectionRule> SpikeDetectionRules => Set<SpikeDetectionRule>();
+    public DbSet<CorrelatedSpikeAlert> CorrelatedSpikeAlerts => Set<CorrelatedSpikeAlert>();
     public DbSet<UserOverride> UserOverrides => Set<UserOverride>();
     public DbSet<ClassificationQueueItem> ClassificationQueue => Set<ClassificationQueueItem>();
     public DbSet<ClassificationConfig> ClassificationConfigs => Set<ClassificationConfig>();

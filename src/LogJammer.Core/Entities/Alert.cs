@@ -14,6 +14,7 @@ public class Alert
     public DateTime? LastNotifiedAt { get; set; }
     public DateTime? AcknowledgedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
+    public int ConsecutiveBelowThreshold { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

@@ -22,6 +22,7 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
         builder.Property(e => e.LastNotifiedAt).HasColumnName("last_notified_at");
         builder.Property(e => e.AcknowledgedAt).HasColumnName("acknowledged_at");
         builder.Property(e => e.ResolvedAt).HasColumnName("resolved_at");
+        builder.Property(e => e.ConsecutiveBelowThreshold).HasColumnName("consecutive_below_threshold");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");
         builder.Property(e => e.UpdatedAt).HasColumnName("updated_at");
 

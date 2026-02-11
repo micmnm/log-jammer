@@ -18,6 +18,8 @@ builder.Services.AddScoped<LogJammer.Api.Services.IErrorGroupService, LogJammer.
 builder.Services.AddScoped<LogJammer.Api.Services.ITagService, LogJammer.Api.Services.TagService>();
 builder.Services.AddScoped<LogJammer.Api.Services.IConfigurationService, LogJammer.Api.Services.ConfigurationService>();
 builder.Services.AddScoped<LogJammer.Api.Services.IClassificationQueueService, LogJammer.Api.Services.ClassificationQueueService>();
+builder.Services.AddScoped<LogJammer.Api.Services.IAlertService, LogJammer.Api.Services.AlertService>();
+builder.Services.AddScoped<LogJammer.Api.Services.ISpikeDetectionRuleService, LogJammer.Api.Services.SpikeDetectionRuleService>();
 
 // Pipeline (repos, mapper, calculator, background services)
 builder.Services.AddPipelineServices();
@@ -42,6 +44,7 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
     await TagSeeder.SeedAsync(db, logger);
     await ClassificationConfigSeeder.SeedAsync(db, logger);
+    await SpikeDetectionRuleSeeder.SeedAsync(db, logger);
 }
 
 // OpenAPI + Scalar UI

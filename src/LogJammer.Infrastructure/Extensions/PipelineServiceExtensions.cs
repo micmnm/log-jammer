@@ -33,10 +33,19 @@ public static class PipelineServiceExtensions
         services.AddSingleton<IEmbeddingProvider, OnnxEmbeddingProvider>();
         services.AddScoped<IClassificationService, ClassificationService>();
 
+        // Spike detection & alerting
+        services.AddScoped<IAlertRepository, AlertRepository>();
+        services.AddScoped<ISpikeDetectionRuleRepository, SpikeDetectionRuleRepository>();
+        services.AddScoped<ICorrelatedSpikeAlertRepository, CorrelatedSpikeAlertRepository>();
+        services.AddScoped<ISpikeDetector, SpikeDetector>();
+        services.AddScoped<IAlertManager, AlertManager>();
+        services.AddScoped<ICorrelationDetector, CorrelationDetector>();
+
         // Background services
         services.AddHostedService<DataSourcePollingManager>();
         services.AddHostedService<DataRetentionService>();
         services.AddHostedService<ClassificationProcessor>();
+        services.AddHostedService<SpikeDetectionProcessor>();
 
         return services;
     }
