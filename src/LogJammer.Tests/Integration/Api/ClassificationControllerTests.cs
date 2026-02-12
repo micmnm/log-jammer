@@ -9,13 +9,12 @@ using LogJammer.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Testcontainers.PostgreSql;
 
 namespace LogJammer.Tests.Integration.Api;
 
 public class ClassificationControllerTests : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg17").Build();
+    private readonly TestDatabaseProvider _db = new();
     private WebApplicationFactory<Program> _factory = null!;
     private HttpClient _client = null!;
     private readonly JsonSerializerOptions _jsonOptions = new()
@@ -26,7 +25,7 @@ public class ClassificationControllerTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _container.StartAsync();
+        await _db.InitializeAsync();
 
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -38,7 +37,7 @@ public class ClassificationControllerTests : IAsyncLifetime
                     if (descriptor != null) services.Remove(descriptor);
 
                     services.AddDbContext<LogJammerDbContext>(options =>
-                        options.UseNpgsql(_container.GetConnectionString(),
+                        options.UseNpgsql(_db.ConnectionString,
                             npgsqlOptions => npgsqlOptions.UseVector()));
                 });
             });
@@ -50,7 +49,7 @@ public class ClassificationControllerTests : IAsyncLifetime
     {
         _client.Dispose();
         await _factory.DisposeAsync();
-        await _container.DisposeAsync().AsTask();
+        await _db.DisposeAsync();
     }
 
     [Fact]

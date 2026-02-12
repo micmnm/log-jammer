@@ -11,7 +11,7 @@ namespace LogJammer.Tests.Integration;
 
 public class SpikeDetectionIntegrationTests : IAsyncLifetime
 {
-    private readonly DatabaseFixture _fixture = new();
+    private readonly TestDatabaseProvider _db = new();
     private LogJammerDbContext _context = null!;
     private SpikeDetector _spikeDetector = null!;
     private AlertManager _alertManager = null!;
@@ -20,8 +20,8 @@ public class SpikeDetectionIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _fixture.InitializeAsync();
-        _context = _fixture.CreateDbContext();
+        await _db.InitializeAsync();
+        _context = _db.CreateDbContext();
         await _context.Database.MigrateAsync();
 
         var occurrenceRepo = new ErrorOccurrenceRepository(_context);
@@ -57,7 +57,7 @@ public class SpikeDetectionIntegrationTests : IAsyncLifetime
     public async Task DisposeAsync()
     {
         await _context.DisposeAsync();
-        await _fixture.DisposeAsync();
+        await _db.DisposeAsync();
     }
 
     [Fact]

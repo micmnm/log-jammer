@@ -116,7 +116,46 @@ Full endpoint reference: [specs/definition-api.md](specs/definition-api.md)
 ### Prerequisites
 
 - .NET 10 SDK
-- Docker (for PostgreSQL + pgvector)
+- PostgreSQL 17 + pgvector **or** Docker
+
+### Option A: Local PostgreSQL (no Docker needed for the API)
+
+Install PostgreSQL 17 and pgvector via Homebrew:
+
+```bash
+brew install postgresql@17
+brew install pgvector
+brew services start postgresql@17
+```
+
+Create the database and user:
+
+```bash
+createuser -s logjammer 2>/dev/null; psql -U logjammer -d postgres -c "ALTER USER logjammer PASSWORD 'logjammer';" 2>/dev/null
+createdb -U logjammer logjammer 2>/dev/null
+createdb -U logjammer logjammer_test 2>/dev/null
+psql -U logjammer -d logjammer -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql -U logjammer -d logjammer_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+Run the API (EF auto-migrates on startup):
+
+```bash
+dotnet run --project src/LogJammer.Api
+```
+
+### Option B: Docker for the database only
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+dotnet run --project src/LogJammer.Api
+```
+
+### Option C: Full Docker stack
+
+```bash
+docker compose up
+```
 
 ### Build
 
@@ -126,11 +165,25 @@ dotnet build src/LogJammer.slnx
 
 ### Test
 
+**With Docker (default):** tests use [Testcontainers](https://dotnet.testcontainers.org/) to spin up ephemeral PostgreSQL containers:
+
 ```bash
 dotnet test src/LogJammer.slnx
 ```
 
-Tests use [Testcontainers](https://dotnet.testcontainers.org/) and require Docker to be running.
+**With local PostgreSQL (no Docker):** set `TEST_USE_LOCAL_DB=true` to run integration tests against a local database:
+
+```bash
+TEST_USE_LOCAL_DB=true dotnet test src/LogJammer.slnx
+```
+
+You can also override the test connection string:
+
+```bash
+TEST_USE_LOCAL_DB=true TEST_CONNECTION_STRING="Host=localhost;Port=5432;Database=logjammer_test;Username=logjammer;Password=logjammer" dotnet test src/LogJammer.slnx
+```
+
+When using local DB mode, Elasticsearch adapter tests are skipped if Docker is not available.
 
 ## License
 

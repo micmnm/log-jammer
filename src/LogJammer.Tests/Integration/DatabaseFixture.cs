@@ -1,32 +1,25 @@
 using LogJammer.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
-using Testcontainers.PostgreSql;
 
 namespace LogJammer.Tests.Integration;
 
 public class DatabaseFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg17")
-        .Build();
+    private readonly TestDatabaseProvider _provider = new();
 
-    public string ConnectionString => _container.GetConnectionString();
+    public string ConnectionString => _provider.ConnectionString;
 
     public async Task InitializeAsync()
     {
-        await _container.StartAsync();
+        await _provider.InitializeAsync();
     }
 
     public async Task DisposeAsync()
     {
-        await _container.DisposeAsync().AsTask();
+        await _provider.DisposeAsync();
     }
 
     public LogJammerDbContext CreateDbContext()
     {
-        var options = new DbContextOptionsBuilder<LogJammerDbContext>()
-            .UseNpgsql(ConnectionString, npgsqlOptions => npgsqlOptions.UseVector())
-            .Options;
-
-        return new LogJammerDbContext(options);
+        return _provider.CreateDbContext();
     }
 }

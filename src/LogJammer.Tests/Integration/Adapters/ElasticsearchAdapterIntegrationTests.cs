@@ -7,17 +7,24 @@ using Testcontainers.Elasticsearch;
 
 namespace LogJammer.Tests.Integration.Adapters;
 
+[Trait("Category", "Docker")]
 public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
 {
-    private readonly ElasticsearchContainer _container = new ElasticsearchBuilder("docker.elastic.co/elasticsearch/elasticsearch:8.17.0")
-        .WithEnvironment("xpack.security.enabled", "false")
-        .WithEnvironment("discovery.type", "single-node")
-        .Build();
-
+    private ElasticsearchContainer? _container;
     private string _baseUrl = null!;
+
+    private static bool ShouldSkip =>
+        TestDatabaseProvider.UseLocalDb && !TestDatabaseProvider.IsDockerAvailable();
 
     public async Task InitializeAsync()
     {
+        if (ShouldSkip) return;
+
+        _container = new ElasticsearchBuilder("docker.elastic.co/elasticsearch/elasticsearch:8.17.0")
+            .WithEnvironment("xpack.security.enabled", "false")
+            .WithEnvironment("discovery.type", "single-node")
+            .Build();
+
         await _container.StartAsync();
         _baseUrl = _container.GetConnectionString();
 
@@ -46,7 +53,8 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _container.DisposeAsync().AsTask();
+        if (_container is not null)
+            await _container.DisposeAsync().AsTask();
     }
 
     private string MakeConfig(string? indexPattern = null)
@@ -58,9 +66,11 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
         });
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task TestConnection_ReturnsSuccess()
     {
+        Skip.If(ShouldSkip, "Docker is not available; skipping Elasticsearch tests");
+
         var adapter = new ElasticsearchAdapter(MakeConfig());
 
         var result = await adapter.TestConnectionAsync();
@@ -69,9 +79,11 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
         result.Latency.Should().BeGreaterThan(TimeSpan.Zero);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetSampleRecords_ReturnsDocuments()
     {
+        Skip.If(ShouldSkip, "Docker is not available; skipping Elasticsearch tests");
+
         var adapter = new ElasticsearchAdapter(MakeConfig());
 
         var records = await adapter.GetSampleRecordsAsync(3);
@@ -84,9 +96,11 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
         });
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PollErrors_WithTimestampFilter_ReturnsFilteredResults()
     {
+        Skip.If(ShouldSkip, "Docker is not available; skipping Elasticsearch tests");
+
         var adapter = new ElasticsearchAdapter(MakeConfig());
 
         var batch = await adapter.PollErrorsAsync(DateTime.UtcNow.AddHours(-1), 100);
@@ -95,9 +109,11 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
         batch.TotalAvailable.Should().Be(5);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetSchema_ReturnsMappingFields()
     {
+        Skip.If(ShouldSkip, "Docker is not available; skipping Elasticsearch tests");
+
         var adapter = new ElasticsearchAdapter(MakeConfig());
 
         var schema = await adapter.GetSchemaAsync();

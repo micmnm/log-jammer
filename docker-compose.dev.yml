@@ -1,0 +1,21 @@
+# DB-only compose file for local development.
+# Usage: docker compose -f docker-compose.dev.yml up -d
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: logjammer
+      POSTGRES_USER: logjammer
+      POSTGRES_PASSWORD: logjammer
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logjammer -d logjammer"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
