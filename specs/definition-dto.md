@@ -350,6 +350,14 @@
 - `GetByKnownErrorAsync(knownErrorId)` → `Task<IReadOnlyList<UserOverride>>`
 - `GetByKnownErrorAndTypeAsync(knownErrorId, type)` → `Task<UserOverride?>`
 
+### IFingerprintConfigRepository
+`LogJammer.Core.Interfaces.IFingerprintConfigRepository`
+- `GetByDataSourceIdAsync(dataSourceId)` → `Task<IReadOnlyList<FingerprintConfig>>`
+- `GetByIdAsync(id)` → `Task<FingerprintConfig?>`
+- `AddAsync(config)` → `Task<FingerprintConfig>`
+- `UpdateAsync(config)` → `Task`
+- `DeleteAsync(config)` → `Task`
+
 ### ITagRepository
 `LogJammer.Core.Interfaces.ITagRepository`
 - `GetAllAsync()` → `Task<IReadOnlyList<Tag>>`
@@ -407,3 +415,64 @@
 - `TagId` → `Guid`
 - `TagName` → `string`
 - `Confidence` → `double`
+
+---
+
+## Frontend (TypeScript)
+
+Location: `src/frontend/src/api/types.ts`
+
+TypeScript type definitions mirror the backend DTOs. Generated from backend API responses.
+
+### Key Types
+- `AlertDto`, `AlertListResponse` – mirrors `LogJammer.Api.Dtos.AlertDto`/`AlertListResponse`
+- `CorrelatedSpikeAlertDto` – mirrors `LogJammer.Api.Dtos.CorrelatedSpikeAlertDto`
+- `ErrorGroupResponse`, `ErrorGroupsPagedResponse` – mirrors `LogJammer.Api.Dtos.ErrorGroupResponse`
+- `ErrorGroupDetailResponse` – extends `ErrorGroupResponse` with `representativeStackTrace`
+- `ErrorOccurrenceResponse` – mirrors occurrence window data (windowStart, windowEnd, count, sampleRatio, extrapolatedCount)
+- `DataSourceResponse` – mirrors `LogJammer.Api.Dtos.DataSourceResponse` (id, name, adapterType, connectionConfig, pollIntervalSeconds, schemaMapping, samplingBudget, enabled, fingerprintConfigs)
+- `CreateDataSourceRequest`, `UpdateDataSourceRequest` – data source CRUD request types
+- `ConnectionTestResponse` – connection test result (success, errorMessage, latencyMs, metadata)
+- `SchemaResponse`, `FieldDefinitionDto` – schema discovery types
+- `SampleRecordsResponse`, `RawLogEntryDto` – sample records types
+- `FingerprintConfigResponse`, `CreateFingerprintConfigRequest` – fingerprint config types
+- `TagResponse` – mirrors `LogJammer.Api.Dtos.TagResponse` (id, name, tagType, color, createdAt)
+- `CreateTagRequest`, `UpdateTagRequest` – tag CRUD request types
+- `SpikeDetectionRuleDto`, `CreateSpikeDetectionRuleRequest`, `UpdateSpikeDetectionRuleRequest` – spike detection rule types
+- `ConfigurationResponse`, `UpdateConfigurationRequest` – classification configuration types
+- `ClassificationQueueResponse`, `ClassificationQueuePagedResponse` – mirrors `LogJammer.Api.Dtos.ClassificationQueueResponse`
+- Enums as string union types: `AlertStatus`, `ErrorSeverity`, `ErrorStatus`, `ThresholdType`, `AdapterType`, `TagType`
+
+### Hooks (`src/api/hooks/`)
+- `useAlerts.ts` – useAlerts, useAlertHistory, useCorrelatedAlerts, useAcknowledgeAlert
+- `useDashboard.ts` – useDashboardStats (aggregates alert/error/queue counts)
+- `useDataSources.ts` – useDataSources, useDataSource, useCreateDataSource, useUpdateDataSource, useDeleteDataSource, useTestConnection, useDataSourceSchema, useSampleRecords
+- `useErrorGroups.ts` – useErrorGroups, useErrorGroup, useErrorGroupOccurrences, useUpdateErrorGroupStatus, useUpdateErrorGroupSeverity
+- `useTags.ts` – useTags, useCreateTag, useUpdateTag, useDeleteTag
+- `useClassification.ts` – useClassificationQueue, useApproveClassification, useRejectClassification
+- `useFingerprintConfigs.ts` – useFingerprintConfigs, useCreateFingerprintConfig, useDeleteFingerprintConfig
+- `useSpikeDetectionRules.ts` – useSpikeDetectionRules, useCreateSpikeDetectionRule, useUpdateSpikeDetectionRule, useDeleteSpikeDetectionRule
+- `useConfiguration.ts` – useConfiguration, useUpdateConfiguration
+
+### Pages
+- `Dashboard` – stat cards, backpressure indicator, alerts feed
+- `Alerts` – active/history tabs with pagination
+- `ErrorGroups` – DataGrid with server-side pagination, severity/status/data source filters
+- `ErrorGroupDetail` – header, metadata, severity/status controls, occurrence chart (Chart.js), stack trace accordion, related alerts
+- `Classification` – paginated queue cards with approve/reject flow
+- `DataSources` – table with CRUD, toggle enabled, test connection, schema mapping, fingerprint config dialogs
+- `Settings` – tabs: Rules (spike detection CRUD), Tags (CRUD with color picker), Classification (key-value config editor)
+
+### Shared Components
+- `SeverityChip` – ErrorSeverity → MUI Chip color mapping
+- `StatusChip` – ErrorStatus → MUI Chip variant/color mapping
+- `ConfidenceBar` – LinearProgress with percentage label
+- `BackpressureIndicator` – warning banner when data source samplingBudget < 0.5
+- `ClassificationQueueCard` – queue item card with approve/reject actions and reject dialog
+- `AlertsFeed`, `AlertCard` – alert display with acknowledge action
+- `DataSourceDialog` – create/edit data source with adapter-specific connection fields
+- `SchemaMappingDialog` – dropdown mapping of target fields to source fields with sample preview
+- `FingerprintConfigDialog` – checkbox list with ordering and normalize toggle
+- `settings/RulesTab`, `settings/RuleDialog` – spike detection rule management
+- `settings/TagsTab`, `settings/TagDialog` – tag management with color picker
+- `settings/ClassificationTab` – classification config key-value editor

@@ -59,6 +59,7 @@ public record DataSourceResponse
     public bool Enabled { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
+    public IReadOnlyList<FingerprintConfigResponse> FingerprintConfigs { get; init; } = [];
 }
 
 public record ConnectionTestResponse

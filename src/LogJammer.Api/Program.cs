@@ -20,12 +20,25 @@ builder.Services.AddScoped<LogJammer.Api.Services.IConfigurationService, LogJamm
 builder.Services.AddScoped<LogJammer.Api.Services.IClassificationQueueService, LogJammer.Api.Services.ClassificationQueueService>();
 builder.Services.AddScoped<LogJammer.Api.Services.IAlertService, LogJammer.Api.Services.AlertService>();
 builder.Services.AddScoped<LogJammer.Api.Services.ISpikeDetectionRuleService, LogJammer.Api.Services.SpikeDetectionRuleService>();
+builder.Services.AddScoped<LogJammer.Api.Services.IFingerprintConfigService, LogJammer.Api.Services.FingerprintConfigService>();
+builder.Services.AddScoped<LogJammer.Core.Interfaces.IFingerprintConfigRepository, LogJammer.Infrastructure.Repositories.FingerprintConfigRepository>();
 
 // Pipeline (repos, mapper, calculator, background services)
 builder.Services.AddPipelineServices();
 
 // OpenAPI
 builder.Services.AddOpenApi();
+
+// CORS (dev: allow Vite frontend)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("DevCors", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 
 // Controllers
 builder.Services.AddControllers();
@@ -53,6 +66,8 @@ app.MapScalarApiReference(options =>
 {
     options.WithTitle("Log Jammer API");
 });
+
+app.UseCors("DevCors");
 
 app.MapControllers();
 app.MapHealthChecks("/healthz");

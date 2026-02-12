@@ -42,6 +42,16 @@ Base URL: `http://localhost:5000`
 | GET | `/api/alerts/history` | List resolved alerts (query: dataSourceId, page, pageSize) | Implemented |
 | GET | `/api/alerts/correlated` | List correlated spike alerts (query: status, page, pageSize) | Implemented |
 
+## Fingerprint Configs
+
+| Method | Path | Description | Status |
+|--------|------|-------------|--------|
+| GET | `/api/datasources/{dataSourceId}/fingerprint-configs` | List fingerprint configs for data source | Implemented |
+| POST | `/api/datasources/{dataSourceId}/fingerprint-configs` | Create fingerprint config | Implemented |
+| GET | `/api/datasources/{dataSourceId}/fingerprint-configs/{id}` | Get fingerprint config by ID | Implemented |
+| PUT | `/api/datasources/{dataSourceId}/fingerprint-configs/{id}` | Update fingerprint config | Implemented |
+| DELETE | `/api/datasources/{dataSourceId}/fingerprint-configs/{id}` | Delete fingerprint config | Implemented |
+
 ## Spike Detection Rules
 
 | Method | Path | Description | Status |
@@ -77,6 +87,12 @@ Base URL: `http://localhost:5000`
 | GET | `/api/classification/queue/{id}` | Get single classification queue item | Implemented |
 | POST | `/api/classification/queue/{id}/approve` | Accept suggested tags | Implemented |
 | POST | `/api/classification/queue/{id}/reject` | Reject with user-provided tags | Implemented |
+
+## CORS
+
+| Origin | Methods | Status |
+|--------|---------|--------|
+| `http://localhost:5173` | All | Implemented (dev policy) |
 
 ## OpenAPI
 

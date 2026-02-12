@@ -128,6 +128,15 @@ public class DataSourceService(
         SamplingBudget = ds.SamplingBudget,
         Enabled = ds.Enabled,
         CreatedAt = ds.CreatedAt,
-        UpdatedAt = ds.UpdatedAt
+        UpdatedAt = ds.UpdatedAt,
+        FingerprintConfigs = ds.FingerprintConfigs?.Select(fc => new FingerprintConfigResponse
+        {
+            Id = fc.Id,
+            DataSourceId = fc.DataSourceId,
+            FieldName = fc.FieldName,
+            Order = fc.Order,
+            NormalizeBeforeHash = fc.NormalizeBeforeHash,
+            CreatedAt = fc.CreatedAt
+        }).ToList() ?? []
     };
 }
