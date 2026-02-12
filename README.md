@@ -2,6 +2,7 @@
 
 Proactive log monitoring with ML-based error classification.
 
+
 ## Overview
 
 Log Jammer is a monitoring application that detects significant events in applications by analyzing structured logs. It uses a local embedding-based ML model to automatically classify, group, and fingerprint errors -- then detects spikes, new error types, and recurring issues to enable faster incident response.
