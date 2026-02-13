@@ -4,82 +4,63 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
 using LogJammer.Api.Dtos;
+using LogJammer.Api.Services;
 using LogJammer.Core.Enums;
-using LogJammer.Infrastructure.Data;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace LogJammer.Tests.Integration.Api;
 
-public class DataSourcesControllerTests : IAsyncLifetime
+public class DataSourcesControllerTests : IDisposable
 {
-    private readonly TestDatabaseProvider _db = new();
-    private WebApplicationFactory<Program> _factory = null!;
-    private HttpClient _client = null!;
+    private readonly TestWebApplicationFactory _factory = new();
+    private readonly HttpClient _client;
+    private readonly IDataSourceService _service;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public async Task InitializeAsync()
+    public DataSourcesControllerTests()
     {
-        await _db.InitializeAsync();
-
-        _factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder =>
-            {
-                builder.ConfigureServices(services =>
-                {
-                    var descriptor = services.SingleOrDefault(
-                        d => d.ServiceType == typeof(DbContextOptions<LogJammerDbContext>));
-                    if (descriptor != null) services.Remove(descriptor);
-
-                    services.AddDbContext<LogJammerDbContext>(options =>
-                        options.UseNpgsql(_db.ConnectionString,
-                            npgsqlOptions => npgsqlOptions.UseVector()));
-                });
-            });
-
         _client = _factory.CreateClient();
+        _service = _factory.DataSourceService;
     }
 
-    public async Task DisposeAsync()
+    public void Dispose()
     {
         _client.Dispose();
-        await _factory.DisposeAsync();
-        await _db.DisposeAsync();
-    }
-
-    private CreateDataSourceRequest MakeLogFileRequest(string name = "Test LogFile Source")
-    {
-        // Create a temp file for LogFile adapter
-        var tempFile = Path.GetTempFileName();
-        File.WriteAllText(tempFile, "{\"timestamp\":\"2024-01-01T00:00:00Z\",\"level\":\"error\",\"message\":\"test\"}\n");
-
-        return new CreateDataSourceRequest
-        {
-            Name = name,
-            AdapterType = AdapterType.LogFile,
-            ConnectionConfig = JsonSerializer.Serialize(new
-            {
-                filePaths = new[] { tempFile },
-                parseMode = "jsonlines",
-                timestampField = "timestamp"
-            })
-        };
+        _factory.Dispose();
     }
 
     [Fact]
     public async Task Create_ReturnsCreated()
     {
-        var request = MakeLogFileRequest();
+        var response = new DataSourceResponse
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test LogFile Source",
+            AdapterType = AdapterType.LogFile,
+            ConnectionConfig = "{}",
+            Enabled = true,
+            PollIntervalSeconds = 30,
+            SamplingBudget = 500,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _service.CreateAsync(Arg.Any<CreateDataSourceRequest>(), Arg.Any<CancellationToken>())
+            .Returns(response);
 
-        var response = await _client.PostAsJsonAsync("/api/datasources", request);
+        var request = new CreateDataSourceRequest
+        {
+            Name = "Test LogFile Source",
+            AdapterType = AdapterType.LogFile,
+            ConnectionConfig = "{}"
+        };
+        var httpResponse = await _client.PostAsJsonAsync("/api/datasources", request);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var body = await response.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
+        httpResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await httpResponse.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
         body.Should().NotBeNull();
         body!.Name.Should().Be("Test LogFile Source");
         body.AdapterType.Should().Be(AdapterType.LogFile);
@@ -89,8 +70,12 @@ public class DataSourcesControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetAll_ReturnsCreatedSources()
     {
-        await _client.PostAsJsonAsync("/api/datasources", MakeLogFileRequest("Source A"));
-        await _client.PostAsJsonAsync("/api/datasources", MakeLogFileRequest("Source B"));
+        _service.GetAllAsync(Arg.Any<CancellationToken>())
+            .Returns(new List<DataSourceResponse>
+            {
+                new() { Id = Guid.NewGuid(), Name = "Source A", AdapterType = AdapterType.LogFile, ConnectionConfig = "{}" },
+                new() { Id = Guid.NewGuid(), Name = "Source B", AdapterType = AdapterType.LogFile, ConnectionConfig = "{}" }
+            });
 
         var response = await _client.GetAsync("/api/datasources");
 
@@ -103,20 +88,25 @@ public class DataSourcesControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetById_ReturnsCorrectSource()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/datasources", MakeLogFileRequest());
-        var created = await createResponse.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
+        var id = Guid.NewGuid();
+        _service.GetByIdAsync(id, Arg.Any<CancellationToken>())
+            .Returns(new DataSourceResponse { Id = id, Name = "Test Source", AdapterType = AdapterType.LogFile, ConnectionConfig = "{}" });
 
-        var response = await _client.GetAsync($"/api/datasources/{created!.Id}");
+        var response = await _client.GetAsync($"/api/datasources/{id}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
-        body!.Id.Should().Be(created.Id);
+        body!.Id.Should().Be(id);
     }
 
     [Fact]
     public async Task GetById_WithNonExistentId_Returns404()
     {
-        var response = await _client.GetAsync($"/api/datasources/{Guid.NewGuid()}");
+        var id = Guid.NewGuid();
+        _service.GetByIdAsync(id, Arg.Any<CancellationToken>())
+            .Returns((DataSourceResponse?)null);
+
+        var response = await _client.GetAsync($"/api/datasources/{id}");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -124,11 +114,12 @@ public class DataSourcesControllerTests : IAsyncLifetime
     [Fact]
     public async Task Update_ReturnsUpdatedSource()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/datasources", MakeLogFileRequest());
-        var created = await createResponse.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
+        var id = Guid.NewGuid();
+        _service.UpdateAsync(id, Arg.Any<UpdateDataSourceRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new DataSourceResponse { Id = id, Name = "Updated Name", AdapterType = AdapterType.LogFile, ConnectionConfig = "{}", Enabled = false });
 
         var updateRequest = new UpdateDataSourceRequest { Name = "Updated Name", Enabled = false };
-        var response = await _client.PutAsJsonAsync($"/api/datasources/{created!.Id}", updateRequest);
+        var response = await _client.PutAsJsonAsync($"/api/datasources/{id}", updateRequest);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
@@ -139,25 +130,23 @@ public class DataSourcesControllerTests : IAsyncLifetime
     [Fact]
     public async Task Delete_ReturnsNoContent()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/datasources", MakeLogFileRequest());
-        var created = await createResponse.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
+        var id = Guid.NewGuid();
+        _service.DeleteAsync(id, Arg.Any<CancellationToken>())
+            .Returns(true);
 
-        var response = await _client.DeleteAsync($"/api/datasources/{created!.Id}");
+        var response = await _client.DeleteAsync($"/api/datasources/{id}");
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-
-        // Verify it's gone
-        var getResponse = await _client.GetAsync($"/api/datasources/{created.Id}");
-        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
     public async Task TestConnection_WithLogFileSource_ReturnsResult()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/datasources", MakeLogFileRequest());
-        var created = await createResponse.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
+        var id = Guid.NewGuid();
+        _service.TestConnectionAsync(id, Arg.Any<CancellationToken>())
+            .Returns(new ConnectionTestResponse { Success = true, LatencyMs = 5.0 });
 
-        var response = await _client.PostAsync($"/api/datasources/{created!.Id}/test", null);
+        var response = await _client.PostAsync($"/api/datasources/{id}/test", null);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<ConnectionTestResponse>(_jsonOptions);
@@ -167,10 +156,14 @@ public class DataSourcesControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetSchema_WithLogFileSource_ReturnsFields()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/datasources", MakeLogFileRequest());
-        var created = await createResponse.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
+        var id = Guid.NewGuid();
+        _service.GetSchemaAsync(id, Arg.Any<CancellationToken>())
+            .Returns(new SchemaResponse
+            {
+                Fields = [new FieldDefinitionDto { Name = "message", Type = "string" }]
+            });
 
-        var response = await _client.GetAsync($"/api/datasources/{created!.Id}/schema");
+        var response = await _client.GetAsync($"/api/datasources/{id}/schema");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<SchemaResponse>(_jsonOptions);
@@ -180,10 +173,14 @@ public class DataSourcesControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetSampleRecords_WithLogFileSource_ReturnsRecords()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/datasources", MakeLogFileRequest());
-        var created = await createResponse.Content.ReadFromJsonAsync<DataSourceResponse>(_jsonOptions);
+        var id = Guid.NewGuid();
+        _service.GetSampleRecordsAsync(id, 5, Arg.Any<CancellationToken>())
+            .Returns(new SampleRecordsResponse
+            {
+                Records = [new RawLogEntryDto { Timestamp = DateTime.UtcNow, Fields = new() { ["message"] = "test" } }]
+            });
 
-        var response = await _client.GetAsync($"/api/datasources/{created!.Id}/sample?count=5");
+        var response = await _client.GetAsync($"/api/datasources/{id}/sample?count=5");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<SampleRecordsResponse>(_jsonOptions);

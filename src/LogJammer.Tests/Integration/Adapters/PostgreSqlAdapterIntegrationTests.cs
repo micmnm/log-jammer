@@ -5,13 +5,19 @@ using Npgsql;
 
 namespace LogJammer.Tests.Integration.Adapters;
 
-public class PostgreSqlAdapterIntegrationTests : IClassFixture<DatabaseFixture>
+public class PostgreSqlAdapterIntegrationTests : IAsyncLifetime
 {
-    private readonly DatabaseFixture _fixture;
+    private readonly DatabaseFixture _fixture = new();
 
-    public PostgreSqlAdapterIntegrationTests(DatabaseFixture fixture)
+    public async Task InitializeAsync()
     {
-        _fixture = fixture;
+        Skip.IfNot(TestDatabaseProvider.IsDockerAvailable(), "Docker is not available");
+        await _fixture.InitializeAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _fixture.DisposeAsync();
     }
 
     private async Task CreateTestTable()
@@ -49,7 +55,7 @@ public class PostgreSqlAdapterIntegrationTests : IClassFixture<DatabaseFixture>
         });
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task TestConnection_WithExistingTable_ReturnsSuccess()
     {
         await CreateTestTable();
@@ -61,7 +67,7 @@ public class PostgreSqlAdapterIntegrationTests : IClassFixture<DatabaseFixture>
         result.Metadata.Should().ContainKey("tableName");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task TestConnection_WithNonExistentTable_ReturnsFailure()
     {
         var adapter = new PostgreSqlAdapter(MakeConfig(tableName: "nonexistent_table"));
@@ -72,7 +78,7 @@ public class PostgreSqlAdapterIntegrationTests : IClassFixture<DatabaseFixture>
         result.ErrorMessage.Should().Contain("does not exist");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetSampleRecords_ReturnsRows()
     {
         await CreateTestTable();
@@ -88,7 +94,7 @@ public class PostgreSqlAdapterIntegrationTests : IClassFixture<DatabaseFixture>
         });
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PollErrors_WithTimestampFilter_ReturnsResults()
     {
         await CreateTestTable();
@@ -100,7 +106,7 @@ public class PostgreSqlAdapterIntegrationTests : IClassFixture<DatabaseFixture>
         batch.TotalAvailable.Should().Be(5);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetSchema_ReturnsColumns()
     {
         await CreateTestTable();

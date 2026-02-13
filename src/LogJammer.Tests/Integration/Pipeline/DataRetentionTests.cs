@@ -6,16 +6,22 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LogJammer.Tests.Integration.Pipeline;
 
-public class DataRetentionTests : IClassFixture<DatabaseFixture>
+public class DataRetentionTests : IAsyncLifetime
 {
-    private readonly DatabaseFixture _fixture;
+    private readonly DatabaseFixture _fixture = new();
 
-    public DataRetentionTests(DatabaseFixture fixture)
+    public async Task InitializeAsync()
     {
-        _fixture = fixture;
+        Skip.IfNot(TestDatabaseProvider.IsDockerAvailable(), "Docker is not available");
+        await _fixture.InitializeAsync();
     }
 
-    [Fact]
+    public async Task DisposeAsync()
+    {
+        await _fixture.DisposeAsync();
+    }
+
+    [SkippableFact]
     public async Task DeleteOlderThan_RemovesOldRecords()
     {
         await using var context = _fixture.CreateDbContext();

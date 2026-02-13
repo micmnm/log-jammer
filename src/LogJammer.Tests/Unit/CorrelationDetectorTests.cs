@@ -1,152 +1,108 @@
 using FluentAssertions;
 using LogJammer.Core.Entities;
 using LogJammer.Core.Enums;
-using LogJammer.Infrastructure.Data;
+using LogJammer.Core.Interfaces;
 using LogJammer.Infrastructure.Pipeline;
-using LogJammer.Infrastructure.Repositories;
-using LogJammer.Tests.Integration;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
 namespace LogJammer.Tests.Unit;
 
-public class CorrelationDetectorTests : IAsyncLifetime
+public class CorrelationDetectorTests
 {
-    private readonly DatabaseFixture _fixture = new();
-    private LogJammerDbContext _context = null!;
-    private CorrelationDetector _detector = null!;
-    private DataSource _dataSource = null!;
+    private readonly IAlertRepository _alertRepo = Substitute.For<IAlertRepository>();
+    private readonly ICorrelatedSpikeAlertRepository _correlatedRepo = Substitute.For<ICorrelatedSpikeAlertRepository>();
+    private readonly CorrelationDetector _detector;
+    private readonly Guid _dataSourceId = Guid.NewGuid();
 
-    public async Task InitializeAsync()
+    public CorrelationDetectorTests()
     {
-        await _fixture.InitializeAsync();
-        _context = _fixture.CreateDbContext();
-        await _context.Database.MigrateAsync();
-
-        var alertRepo = new AlertRepository(_context);
-        var correlatedRepo = new CorrelatedSpikeAlertRepository(_context);
-        _detector = new CorrelationDetector(alertRepo, correlatedRepo, NullLogger<CorrelationDetector>.Instance);
-
-        _dataSource = new DataSource
-        {
-            Name = "Test Source",
-            AdapterType = AdapterType.LogFile,
-            ConnectionConfig = "{}"
-        };
-        _context.DataSources.Add(_dataSource);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task DisposeAsync()
-    {
-        await _context.DisposeAsync();
-        await _fixture.DisposeAsync();
+        _detector = new CorrelationDetector(_alertRepo, _correlatedRepo, NullLogger<CorrelationDetector>.Instance);
     }
 
     [Fact]
     public async Task DetectAsync_CreatesCorrelatedAlert_WhenThreeOrMoreGroupsSpike()
     {
-        // Create 3 known errors with recent alerts
-        for (var i = 0; i < 3; i++)
+        var alerts = Enumerable.Range(0, 3).Select(i => new Alert
         {
-            var knownError = new KnownError
-            {
-                FingerprintHash = $"corr-test-{i}",
-                RepresentativeMessage = $"Test error {i}",
-                DataSourceId = _dataSource.Id,
-                FirstSeen = DateTime.UtcNow,
-                LastSeen = DateTime.UtcNow,
-                TotalOccurrences = 1
-            };
-            _context.KnownErrors.Add(knownError);
-            await _context.SaveChangesAsync();
+            Id = Guid.NewGuid(),
+            KnownErrorId = Guid.NewGuid(),
+            Status = AlertStatus.Firing,
+            ThresholdType = ThresholdType.Absolute,
+            ThresholdValue = 10,
+            ActualValue = 20
+        }).ToList();
 
-            _context.Alerts.Add(new Alert
+        _alertRepo.GetRecentByDataSourceAsync(_dataSourceId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(alerts);
+        _correlatedRepo.GetActiveByDataSourceIdAsync(_dataSourceId, Arg.Any<CancellationToken>())
+            .Returns((CorrelatedSpikeAlert?)null);
+
+        CorrelatedSpikeAlert? captured = null;
+        _correlatedRepo.AddAsync(Arg.Any<CorrelatedSpikeAlert>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
             {
-                KnownErrorId = knownError.Id,
-                Status = AlertStatus.Firing,
-                ThresholdType = ThresholdType.Absolute,
-                ThresholdValue = 10,
-                ActualValue = 20
+                captured = ci.Arg<CorrelatedSpikeAlert>();
+                return captured;
             });
-        }
-        await _context.SaveChangesAsync();
 
-        await _detector.DetectAsync(_dataSource.Id);
+        await _detector.DetectAsync(_dataSourceId);
 
-        var correlated = await _context.CorrelatedSpikeAlerts.ToListAsync();
-        correlated.Should().HaveCount(1);
-        correlated[0].GroupCount.Should().Be(3);
-        correlated[0].DataSourceId.Should().Be(_dataSource.Id);
+        await _correlatedRepo.Received(1).AddAsync(Arg.Any<CorrelatedSpikeAlert>(), Arg.Any<CancellationToken>());
+        captured.Should().NotBeNull();
+        captured!.GroupCount.Should().Be(3);
+        captured.DataSourceId.Should().Be(_dataSourceId);
     }
 
     [Fact]
     public async Task DetectAsync_DoesNotCreate_WhenFewerThanThreeGroups()
     {
-        for (var i = 0; i < 2; i++)
+        var alerts = Enumerable.Range(0, 2).Select(i => new Alert
         {
-            var knownError = new KnownError
-            {
-                FingerprintHash = $"corr-few-{i}",
-                RepresentativeMessage = $"Test error {i}",
-                DataSourceId = _dataSource.Id,
-                FirstSeen = DateTime.UtcNow,
-                LastSeen = DateTime.UtcNow,
-                TotalOccurrences = 1
-            };
-            _context.KnownErrors.Add(knownError);
-            await _context.SaveChangesAsync();
+            Id = Guid.NewGuid(),
+            KnownErrorId = Guid.NewGuid(),
+            Status = AlertStatus.Firing,
+            ThresholdType = ThresholdType.Absolute,
+            ThresholdValue = 10,
+            ActualValue = 20
+        }).ToList();
 
-            _context.Alerts.Add(new Alert
-            {
-                KnownErrorId = knownError.Id,
-                Status = AlertStatus.Firing,
-                ThresholdType = ThresholdType.Absolute,
-                ThresholdValue = 10,
-                ActualValue = 20
-            });
-        }
-        await _context.SaveChangesAsync();
+        _alertRepo.GetRecentByDataSourceAsync(_dataSourceId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(alerts);
 
-        await _detector.DetectAsync(_dataSource.Id);
+        await _detector.DetectAsync(_dataSourceId);
 
-        var correlated = await _context.CorrelatedSpikeAlerts.ToListAsync();
-        correlated.Should().BeEmpty();
+        await _correlatedRepo.DidNotReceive().AddAsync(Arg.Any<CorrelatedSpikeAlert>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task DetectAsync_DedupesCorrelatedAlerts()
     {
-        for (var i = 0; i < 3; i++)
+        var alerts = Enumerable.Range(0, 3).Select(i => new Alert
         {
-            var knownError = new KnownError
-            {
-                FingerprintHash = $"corr-dedup-{i}",
-                RepresentativeMessage = $"Test error {i}",
-                DataSourceId = _dataSource.Id,
-                FirstSeen = DateTime.UtcNow,
-                LastSeen = DateTime.UtcNow,
-                TotalOccurrences = 1
-            };
-            _context.KnownErrors.Add(knownError);
-            await _context.SaveChangesAsync();
+            Id = Guid.NewGuid(),
+            KnownErrorId = Guid.NewGuid(),
+            Status = AlertStatus.Firing,
+            ThresholdType = ThresholdType.Absolute,
+            ThresholdValue = 10,
+            ActualValue = 20
+        }).ToList();
 
-            _context.Alerts.Add(new Alert
-            {
-                KnownErrorId = knownError.Id,
-                Status = AlertStatus.Firing,
-                ThresholdType = ThresholdType.Absolute,
-                ThresholdValue = 10,
-                ActualValue = 20
-            });
-        }
-        await _context.SaveChangesAsync();
+        _alertRepo.GetRecentByDataSourceAsync(_dataSourceId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(alerts);
 
-        // Detect twice
-        await _detector.DetectAsync(_dataSource.Id);
-        await _detector.DetectAsync(_dataSource.Id);
+        // First call: no existing correlated alert
+        _correlatedRepo.GetActiveByDataSourceIdAsync(_dataSourceId, Arg.Any<CancellationToken>())
+            .Returns(
+                (CorrelatedSpikeAlert?)null,
+                new CorrelatedSpikeAlert { DataSourceId = _dataSourceId, Status = AlertStatus.Firing, GroupCount = 3 });
 
-        var correlated = await _context.CorrelatedSpikeAlerts.ToListAsync();
-        correlated.Should().HaveCount(1);
+        _correlatedRepo.AddAsync(Arg.Any<CorrelatedSpikeAlert>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<CorrelatedSpikeAlert>());
+
+        await _detector.DetectAsync(_dataSourceId);
+        await _detector.DetectAsync(_dataSourceId);
+
+        await _correlatedRepo.Received(1).AddAsync(Arg.Any<CorrelatedSpikeAlert>(), Arg.Any<CancellationToken>());
     }
 }

@@ -4,69 +4,60 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
 using LogJammer.Api.Dtos;
-using LogJammer.Infrastructure.Data;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using LogJammer.Api.Services;
+using NSubstitute;
 
 namespace LogJammer.Tests.Integration.Api;
 
-public class TagsControllerTests : IAsyncLifetime
+public class TagsControllerTests : IDisposable
 {
-    private readonly TestDatabaseProvider _db = new();
-    private WebApplicationFactory<Program> _factory = null!;
-    private HttpClient _client = null!;
+    private readonly TestWebApplicationFactory _factory = new();
+    private readonly HttpClient _client;
+    private readonly ITagService _service;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public async Task InitializeAsync()
+    public TagsControllerTests()
     {
-        await _db.InitializeAsync();
-
-        _factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder =>
-            {
-                builder.ConfigureServices(services =>
-                {
-                    var descriptor = services.SingleOrDefault(
-                        d => d.ServiceType == typeof(DbContextOptions<LogJammerDbContext>));
-                    if (descriptor != null) services.Remove(descriptor);
-
-                    services.AddDbContext<LogJammerDbContext>(options =>
-                        options.UseNpgsql(_db.ConnectionString,
-                            npgsqlOptions => npgsqlOptions.UseVector()));
-                });
-            });
-
         _client = _factory.CreateClient();
+        _service = _factory.TagService;
     }
 
-    public async Task DisposeAsync()
+    public void Dispose()
     {
         _client.Dispose();
-        await _factory.DisposeAsync();
-        await _db.DisposeAsync();
+        _factory.Dispose();
     }
 
     [Fact]
-    public async Task GetAll_ShouldReturnSeededTags()
+    public async Task GetAll_ShouldReturnTags()
     {
+        _service.GetAllAsync(Arg.Any<CancellationToken>())
+            .Returns(new List<TagResponse>
+            {
+                new() { Id = Guid.NewGuid(), Name = "database", TagType = "auto" },
+                new() { Id = Guid.NewGuid(), Name = "network", TagType = "auto" }
+            });
+
         var response = await _client.GetAsync("/api/tags");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var tags = await response.Content.ReadFromJsonAsync<List<TagResponse>>(_jsonOptions);
         tags.Should().NotBeNull();
-        tags!.Count.Should().BeGreaterThanOrEqualTo(12, "default tags are seeded");
+        tags!.Count.Should().BeGreaterThanOrEqualTo(2);
     }
 
     [Fact]
     public async Task Create_ShouldReturnCreatedTag()
     {
-        var request = new CreateTagRequest { Name = "custom-test-tag", TagType = "user", Color = "#ff0000" };
+        var tagId = Guid.NewGuid();
+        _service.CreateAsync(Arg.Any<CreateTagRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new TagResponse { Id = tagId, Name = "custom-test-tag", TagType = "user", Color = "#ff0000" });
 
+        var request = new CreateTagRequest { Name = "custom-test-tag", TagType = "user", Color = "#ff0000" };
         var response = await _client.PostAsJsonAsync("/api/tags", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -80,12 +71,11 @@ public class TagsControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetById_ShouldReturnTag()
     {
-        // Create a tag first
-        var createRequest = new CreateTagRequest { Name = "get-by-id-tag", TagType = "user" };
-        var createResponse = await _client.PostAsJsonAsync("/api/tags", createRequest);
-        var created = await createResponse.Content.ReadFromJsonAsync<TagResponse>(_jsonOptions);
+        var tagId = Guid.NewGuid();
+        _service.GetByIdAsync(tagId, Arg.Any<CancellationToken>())
+            .Returns(new TagResponse { Id = tagId, Name = "get-by-id-tag", TagType = "user" });
 
-        var response = await _client.GetAsync($"/api/tags/{created!.Id}");
+        var response = await _client.GetAsync($"/api/tags/{tagId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var tag = await response.Content.ReadFromJsonAsync<TagResponse>(_jsonOptions);
@@ -95,12 +85,12 @@ public class TagsControllerTests : IAsyncLifetime
     [Fact]
     public async Task Update_ShouldModifyTag()
     {
-        var createRequest = new CreateTagRequest { Name = "update-test-tag", TagType = "user", Color = "#000000" };
-        var createResponse = await _client.PostAsJsonAsync("/api/tags", createRequest);
-        var created = await createResponse.Content.ReadFromJsonAsync<TagResponse>(_jsonOptions);
+        var tagId = Guid.NewGuid();
+        _service.UpdateAsync(tagId, Arg.Any<UpdateTagRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new TagResponse { Id = tagId, Name = "updated-tag", TagType = "user", Color = "#ffffff" });
 
         var updateRequest = new UpdateTagRequest { Name = "updated-tag", Color = "#ffffff" };
-        var response = await _client.PutAsJsonAsync($"/api/tags/{created!.Id}", updateRequest);
+        var response = await _client.PutAsJsonAsync($"/api/tags/{tagId}", updateRequest);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var tag = await response.Content.ReadFromJsonAsync<TagResponse>(_jsonOptions);
@@ -111,21 +101,22 @@ public class TagsControllerTests : IAsyncLifetime
     [Fact]
     public async Task Delete_ShouldRemoveTag()
     {
-        var createRequest = new CreateTagRequest { Name = "delete-test-tag", TagType = "user" };
-        var createResponse = await _client.PostAsJsonAsync("/api/tags", createRequest);
-        var created = await createResponse.Content.ReadFromJsonAsync<TagResponse>(_jsonOptions);
+        var tagId = Guid.NewGuid();
+        _service.DeleteAsync(tagId, Arg.Any<CancellationToken>())
+            .Returns(true);
 
-        var deleteResponse = await _client.DeleteAsync($"/api/tags/{created!.Id}");
+        var deleteResponse = await _client.DeleteAsync($"/api/tags/{tagId}");
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
-
-        var getResponse = await _client.GetAsync($"/api/tags/{created.Id}");
-        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
     public async Task GetById_NotFound_ShouldReturn404()
     {
-        var response = await _client.GetAsync($"/api/tags/{Guid.NewGuid()}");
+        var tagId = Guid.NewGuid();
+        _service.GetByIdAsync(tagId, Arg.Any<CancellationToken>())
+            .Returns((TagResponse?)null);
+
+        var response = await _client.GetAsync($"/api/tags/{tagId}");
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

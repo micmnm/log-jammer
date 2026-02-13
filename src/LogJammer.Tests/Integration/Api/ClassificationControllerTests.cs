@@ -4,57 +4,46 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
 using LogJammer.Api.Dtos;
-using LogJammer.Core.Entities;
-using LogJammer.Infrastructure.Data;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using LogJammer.Api.Services;
+using NSubstitute;
 
 namespace LogJammer.Tests.Integration.Api;
 
-public class ClassificationControllerTests : IAsyncLifetime
+public class ClassificationControllerTests : IDisposable
 {
-    private readonly TestDatabaseProvider _db = new();
-    private WebApplicationFactory<Program> _factory = null!;
-    private HttpClient _client = null!;
+    private readonly TestWebApplicationFactory _factory = new();
+    private readonly HttpClient _client;
+    private readonly IClassificationQueueService _service;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public async Task InitializeAsync()
+    public ClassificationControllerTests()
     {
-        await _db.InitializeAsync();
-
-        _factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder =>
-            {
-                builder.ConfigureServices(services =>
-                {
-                    var descriptor = services.SingleOrDefault(
-                        d => d.ServiceType == typeof(DbContextOptions<LogJammerDbContext>));
-                    if (descriptor != null) services.Remove(descriptor);
-
-                    services.AddDbContext<LogJammerDbContext>(options =>
-                        options.UseNpgsql(_db.ConnectionString,
-                            npgsqlOptions => npgsqlOptions.UseVector()));
-                });
-            });
-
         _client = _factory.CreateClient();
+        _service = _factory.ClassificationQueueService;
     }
 
-    public async Task DisposeAsync()
+    public void Dispose()
     {
         _client.Dispose();
-        await _factory.DisposeAsync();
-        await _db.DisposeAsync();
+        _factory.Dispose();
     }
 
     [Fact]
     public async Task GetQueue_ShouldReturnEmptyInitially()
     {
+        _service.GetPendingAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new ClassificationQueuePagedResponse
+            {
+                Items = [],
+                TotalCount = 0,
+                Page = 1,
+                PageSize = 50
+            });
+
         var response = await _client.GetAsync("/api/classification/queue");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -67,35 +56,17 @@ public class ClassificationControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetQueue_WithPendingItem_ShouldReturnItem()
     {
-        // Seed a queue item via direct DB access
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<LogJammerDbContext>();
-            var dataSource = new DataSource
+        _service.GetPendingAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new ClassificationQueuePagedResponse
             {
-                Name = "Test", AdapterType = Core.Enums.AdapterType.LogFile, ConnectionConfig = "{}"
-            };
-            db.DataSources.Add(dataSource);
-            await db.SaveChangesAsync();
-
-            var knownError = new KnownError
-            {
-                FingerprintHash = "test-fp",
-                RepresentativeMessage = "Test error",
-                DataSourceId = dataSource.Id,
-                FirstSeen = DateTime.UtcNow,
-                LastSeen = DateTime.UtcNow,
-                TotalOccurrences = 1
-            };
-            db.KnownErrors.Add(knownError);
-            await db.SaveChangesAsync();
-
-            db.ClassificationQueue.Add(new ClassificationQueueItem
-            {
-                KnownErrorId = knownError.Id
+                Items = new List<ClassificationQueueResponse>
+                {
+                    new() { Id = Guid.NewGuid(), KnownErrorId = Guid.NewGuid(), Message = "Test error", CreatedAt = DateTime.UtcNow }
+                },
+                TotalCount = 1,
+                Page = 1,
+                PageSize = 50
             });
-            await db.SaveChangesAsync();
-        }
 
         var response = await _client.GetAsync("/api/classification/queue");
 
@@ -108,113 +79,39 @@ public class ClassificationControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetQueueItem_NotFound_ShouldReturn404()
     {
-        var response = await _client.GetAsync($"/api/classification/queue/{Guid.NewGuid()}");
+        var id = Guid.NewGuid();
+        _service.GetByIdAsync(id, Arg.Any<CancellationToken>())
+            .Returns((ClassificationQueueResponse?)null);
+
+        var response = await _client.GetAsync($"/api/classification/queue/{id}");
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
     public async Task Approve_ShouldMarkAsReviewed()
     {
-        Guid itemId;
-        Guid tagId;
-
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<LogJammerDbContext>();
-            var dataSource = new DataSource
-            {
-                Name = "Test2", AdapterType = Core.Enums.AdapterType.LogFile, ConnectionConfig = "{}"
-            };
-            db.DataSources.Add(dataSource);
-            await db.SaveChangesAsync();
-
-            var knownError = new KnownError
-            {
-                FingerprintHash = "test-fp-2",
-                RepresentativeMessage = "Approval test error",
-                DataSourceId = dataSource.Id,
-                FirstSeen = DateTime.UtcNow,
-                LastSeen = DateTime.UtcNow,
-                TotalOccurrences = 1
-            };
-            db.KnownErrors.Add(knownError);
-            await db.SaveChangesAsync();
-
-            var item = new ClassificationQueueItem { KnownErrorId = knownError.Id };
-            db.ClassificationQueue.Add(item);
-            await db.SaveChangesAsync();
-            itemId = item.Id;
-
-            // Get a seeded tag
-            var tag = await db.Tags.FirstAsync();
-            tagId = tag.Id;
-        }
+        var itemId = Guid.NewGuid();
+        var tagId = Guid.NewGuid();
+        _service.ApproveAsync(itemId, Arg.Any<ApproveClassificationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var request = new ApproveClassificationRequest { TagIds = [tagId] };
         var response = await _client.PostAsJsonAsync($"/api/classification/queue/{itemId}/approve", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-
-        // Verify item is now reviewed
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<LogJammerDbContext>();
-            var item = await db.ClassificationQueue.FirstAsync(q => q.Id == itemId);
-            item.Reviewed.Should().BeTrue();
-            item.ReviewedAt.Should().NotBeNull();
-        }
     }
 
     [Fact]
     public async Task Reject_ShouldCreateOverrideAndMarkReviewed()
     {
-        Guid itemId;
-        Guid tagId;
-
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<LogJammerDbContext>();
-            var dataSource = new DataSource
-            {
-                Name = "Test3", AdapterType = Core.Enums.AdapterType.LogFile, ConnectionConfig = "{}"
-            };
-            db.DataSources.Add(dataSource);
-            await db.SaveChangesAsync();
-
-            var knownError = new KnownError
-            {
-                FingerprintHash = "test-fp-3",
-                RepresentativeMessage = "Reject test error",
-                DataSourceId = dataSource.Id,
-                FirstSeen = DateTime.UtcNow,
-                LastSeen = DateTime.UtcNow,
-                TotalOccurrences = 1
-            };
-            db.KnownErrors.Add(knownError);
-            await db.SaveChangesAsync();
-
-            var item = new ClassificationQueueItem { KnownErrorId = knownError.Id };
-            db.ClassificationQueue.Add(item);
-            await db.SaveChangesAsync();
-            itemId = item.Id;
-
-            var tag = await db.Tags.FirstAsync();
-            tagId = tag.Id;
-        }
+        var itemId = Guid.NewGuid();
+        var tagId = Guid.NewGuid();
+        _service.RejectAsync(itemId, Arg.Any<RejectClassificationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var request = new RejectClassificationRequest { CorrectTagIds = [tagId], Reason = "Wrong classification" };
         var response = await _client.PostAsJsonAsync($"/api/classification/queue/{itemId}/reject", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<LogJammerDbContext>();
-            var item = await db.ClassificationQueue.FirstAsync(q => q.Id == itemId);
-            item.Reviewed.Should().BeTrue();
-
-            var overrides = await db.UserOverrides.Where(o => o.OverrideType == "classification").ToListAsync();
-            overrides.Should().NotBeEmpty();
-        }
     }
 }

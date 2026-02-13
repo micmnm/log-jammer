@@ -20,6 +20,7 @@ public class SpikeDetectionIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        Skip.IfNot(TestDatabaseProvider.IsDockerAvailable(), "Docker is not available");
         await _db.InitializeAsync();
         _context = _db.CreateDbContext();
         await _context.Database.MigrateAsync();
@@ -60,7 +61,7 @@ public class SpikeDetectionIntegrationTests : IAsyncLifetime
         await _db.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task FullPipeline_DetectSpike_CreateAlert_AutoResolve()
     {
         var knownError = new KnownError
@@ -123,7 +124,7 @@ public class SpikeDetectionIntegrationTests : IAsyncLifetime
         resolvedAlert.Status.Should().Be(AlertStatus.Resolved);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task FullPipeline_MultipleGroupSpikes_TriggersCorrelation()
     {
         var knownErrors = new List<KnownError>();

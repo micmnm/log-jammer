@@ -21,6 +21,8 @@ public class ClassificationServiceTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        Skip.IfNot(TestDatabaseProvider.IsDockerAvailable(), "Docker is not available");
+
         await _fixture.InitializeAsync();
         _context = _fixture.CreateDbContext();
         await _context.Database.MigrateAsync();
@@ -57,12 +59,14 @@ public class ClassificationServiceTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        _embeddingProvider.Dispose();
-        await _context.DisposeAsync();
+        if (_embeddingProvider is not null)
+            _embeddingProvider.Dispose();
+        if (_context is not null)
+            await _context.DisposeAsync();
         await _fixture.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ClassifyAsync_ShouldGenerateEmbedding()
     {
         var error = new KnownError
@@ -84,7 +88,7 @@ public class ClassificationServiceTests : IAsyncLifetime
         reloaded.EmbeddingVector.Should().NotBeNull();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ClassifyAsync_SimilarErrors_ShouldHaveHighSimilarity()
     {
         // Create first error with embedding
@@ -120,7 +124,7 @@ public class ClassificationServiceTests : IAsyncLifetime
         result.SimilarityScore.Should().BeGreaterThan(0.7);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ClassifyAsync_DissimilarErrors_ShouldHaveLowSimilarity()
     {
         var error1 = new KnownError
@@ -154,7 +158,7 @@ public class ClassificationServiceTests : IAsyncLifetime
         result.SimilarityScore.Should().BeLessThan(0.85);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ClassifyAsync_WithPinnedOverride_ShouldReturnOverrideTags()
     {
         // Create a tag
@@ -192,7 +196,7 @@ public class ClassificationServiceTests : IAsyncLifetime
         result.SuggestedTags[0].Confidence.Should().Be(1.0);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task RecalculateTagCentroidAsync_ShouldCreateCentroid()
     {
         var tag = new Tag { Name = "centroid-test-tag", TagType = "auto" };

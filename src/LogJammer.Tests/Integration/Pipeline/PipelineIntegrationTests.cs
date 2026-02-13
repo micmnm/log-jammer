@@ -8,16 +8,22 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LogJammer.Tests.Integration.Pipeline;
 
-public class PipelineIntegrationTests : IClassFixture<DatabaseFixture>
+public class PipelineIntegrationTests : IAsyncLifetime
 {
-    private readonly DatabaseFixture _fixture;
+    private readonly DatabaseFixture _fixture = new();
 
-    public PipelineIntegrationTests(DatabaseFixture fixture)
+    public async Task InitializeAsync()
     {
-        _fixture = fixture;
+        Skip.IfNot(TestDatabaseProvider.IsDockerAvailable(), "Docker is not available");
+        await _fixture.InitializeAsync();
     }
 
-    [Fact]
+    public async Task DisposeAsync()
+    {
+        await _fixture.DisposeAsync();
+    }
+
+    [SkippableFact]
     public async Task FullPipeline_MapFingerprintStoreOccurrence()
     {
         await using var context = _fixture.CreateDbContext();
@@ -90,7 +96,7 @@ public class PipelineIntegrationTests : IClassFixture<DatabaseFixture>
         updated[0].Count.Should().Be(2);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task KnownErrorRepository_GetAllWithFilters()
     {
         await using var context = _fixture.CreateDbContext();

@@ -4,62 +4,51 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
 using LogJammer.Api.Dtos;
-using LogJammer.Infrastructure.Data;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using LogJammer.Api.Services;
+using NSubstitute;
 
 namespace LogJammer.Tests.Integration.Api;
 
-public class ConfigurationControllerTests : IAsyncLifetime
+public class ConfigurationControllerTests : IDisposable
 {
-    private readonly TestDatabaseProvider _db = new();
-    private WebApplicationFactory<Program> _factory = null!;
-    private HttpClient _client = null!;
+    private readonly TestWebApplicationFactory _factory = new();
+    private readonly HttpClient _client;
+    private readonly IConfigurationService _service;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public async Task InitializeAsync()
+    public ConfigurationControllerTests()
     {
-        await _db.InitializeAsync();
-
-        _factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder =>
-            {
-                builder.ConfigureServices(services =>
-                {
-                    var descriptor = services.SingleOrDefault(
-                        d => d.ServiceType == typeof(DbContextOptions<LogJammerDbContext>));
-                    if (descriptor != null) services.Remove(descriptor);
-
-                    services.AddDbContext<LogJammerDbContext>(options =>
-                        options.UseNpgsql(_db.ConnectionString,
-                            npgsqlOptions => npgsqlOptions.UseVector()));
-                });
-            });
-
         _client = _factory.CreateClient();
+        _service = _factory.ConfigurationService;
     }
 
-    public async Task DisposeAsync()
+    public void Dispose()
     {
         _client.Dispose();
-        await _factory.DisposeAsync();
-        await _db.DisposeAsync();
+        _factory.Dispose();
     }
 
     [Fact]
-    public async Task Get_ShouldReturnSeededConfigs()
+    public async Task Get_ShouldReturnConfigs()
     {
+        _service.GetAllAsync(Arg.Any<CancellationToken>())
+            .Returns(new List<ConfigurationResponse>
+            {
+                new() { Key = "SimilarityThreshold", Value = "0.85" },
+                new() { Key = "AutoTagConfidenceThreshold", Value = "0.7" },
+                new() { Key = "MaxSuggestedTags", Value = "3" }
+            });
+
         var response = await _client.GetAsync("/api/configuration");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var configs = await response.Content.ReadFromJsonAsync<List<ConfigurationResponse>>(_jsonOptions);
         configs.Should().NotBeNull();
-        configs!.Count.Should().BeGreaterThanOrEqualTo(3, "default classification configs are seeded");
+        configs!.Count.Should().BeGreaterThanOrEqualTo(3);
         configs.Should().Contain(c => c.Key == "SimilarityThreshold");
         configs.Should().Contain(c => c.Key == "AutoTagConfidenceThreshold");
         configs.Should().Contain(c => c.Key == "MaxSuggestedTags");
@@ -68,8 +57,10 @@ public class ConfigurationControllerTests : IAsyncLifetime
     [Fact]
     public async Task Update_ShouldModifyConfigValue()
     {
-        var request = new UpdateConfigurationRequest { Key = "SimilarityThreshold", Value = "0.90" };
+        _service.UpdateAsync(Arg.Any<UpdateConfigurationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ConfigurationResponse { Key = "SimilarityThreshold", Value = "0.90" });
 
+        var request = new UpdateConfigurationRequest { Key = "SimilarityThreshold", Value = "0.90" };
         var response = await _client.PutAsJsonAsync("/api/configuration", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -82,8 +73,10 @@ public class ConfigurationControllerTests : IAsyncLifetime
     [Fact]
     public async Task Update_ShouldCreateNewConfigIfNotExists()
     {
-        var request = new UpdateConfigurationRequest { Key = "CustomSetting", Value = "42" };
+        _service.UpdateAsync(Arg.Any<UpdateConfigurationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ConfigurationResponse { Key = "CustomSetting", Value = "42" });
 
+        var request = new UpdateConfigurationRequest { Key = "CustomSetting", Value = "42" };
         var response = await _client.PutAsJsonAsync("/api/configuration", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);

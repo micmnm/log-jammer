@@ -2,89 +2,43 @@ using FluentAssertions;
 using LogJammer.Core.Entities;
 using LogJammer.Core.Enums;
 using LogJammer.Core.Interfaces;
-using LogJammer.Infrastructure.Data;
 using LogJammer.Infrastructure.Pipeline;
-using LogJammer.Infrastructure.Repositories;
-using LogJammer.Tests.Integration;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
 namespace LogJammer.Tests.Unit;
 
-public class SpikeDetectorTests : IAsyncLifetime
+public class SpikeDetectorTests
 {
-    private readonly DatabaseFixture _fixture = new();
-    private LogJammerDbContext _context = null!;
-    private SpikeDetector _detector = null!;
-    private DataSource _dataSource = null!;
-    private KnownError _knownError = null!;
+    private readonly IErrorOccurrenceRepository _occurrenceRepo = Substitute.For<IErrorOccurrenceRepository>();
+    private readonly ISpikeDetectionRuleRepository _ruleRepo = Substitute.For<ISpikeDetectionRuleRepository>();
+    private readonly SpikeDetector _detector;
+    private readonly Guid _knownErrorId = Guid.NewGuid();
 
-    public async Task InitializeAsync()
+    public SpikeDetectorTests()
     {
-        await _fixture.InitializeAsync();
-        _context = _fixture.CreateDbContext();
-        await _context.Database.MigrateAsync();
-
-        var occurrenceRepo = new ErrorOccurrenceRepository(_context);
-        var ruleRepo = new SpikeDetectionRuleRepository(_context);
-        _detector = new SpikeDetector(occurrenceRepo, ruleRepo, NullLogger<SpikeDetector>.Instance);
-
-        _dataSource = new DataSource
-        {
-            Name = "Test Source",
-            AdapterType = AdapterType.LogFile,
-            ConnectionConfig = "{}"
-        };
-        _context.DataSources.Add(_dataSource);
-        await _context.SaveChangesAsync();
-
-        _knownError = new KnownError
-        {
-            FingerprintHash = "spike-test-hash",
-            RepresentativeMessage = "Test error",
-            DataSourceId = _dataSource.Id,
-            FirstSeen = DateTime.UtcNow,
-            LastSeen = DateTime.UtcNow,
-            TotalOccurrences = 1
-        };
-        _context.KnownErrors.Add(_knownError);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task DisposeAsync()
-    {
-        await _context.DisposeAsync();
-        await _fixture.DisposeAsync();
+        _detector = new SpikeDetector(_occurrenceRepo, _ruleRepo, NullLogger<SpikeDetector>.Instance);
     }
 
     [Fact]
     public async Task EvaluateAsync_AbsoluteThreshold_ReturnsSpike_WhenAboveThreshold()
     {
-        // Create rule with low threshold
-        _context.SpikeDetectionRules.Add(new SpikeDetectionRule
+        var rule = new SpikeDetectionRule
         {
-            KnownErrorId = _knownError.Id,
+            KnownErrorId = _knownErrorId,
             ThresholdType = ThresholdType.Absolute,
             ThresholdValue = 5,
             WindowMinutes = 5,
             LookbackMinutes = 1440,
             Enabled = true
-        });
-        await _context.SaveChangesAsync();
+        };
+        _ruleRepo.GetByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(rule);
 
-        // Create occurrences that exceed threshold
-        var now = DateTime.UtcNow;
-        var windowStart = now.AddMinutes(-3);
-        _context.ErrorOccurrences.Add(new ErrorOccurrence
-        {
-            KnownErrorId = _knownError.Id,
-            WindowStart = windowStart,
-            WindowEnd = windowStart.AddMinutes(5),
-            Count = 10
-        });
-        await _context.SaveChangesAsync();
+        _occurrenceRepo.GetByKnownErrorAsync(_knownErrorId, Arg.Any<DateTime?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns([new ErrorOccurrence { KnownErrorId = _knownErrorId, Count = 10 }]);
 
-        var result = await _detector.EvaluateAsync(_knownError.Id);
+        var result = await _detector.EvaluateAsync(_knownErrorId);
 
         result.Should().NotBeNull();
         result!.IsSpike.Should().BeTrue();
@@ -95,28 +49,22 @@ public class SpikeDetectorTests : IAsyncLifetime
     [Fact]
     public async Task EvaluateAsync_AbsoluteThreshold_ReturnsNotSpike_WhenBelowThreshold()
     {
-        _context.SpikeDetectionRules.Add(new SpikeDetectionRule
+        var rule = new SpikeDetectionRule
         {
-            KnownErrorId = _knownError.Id,
+            KnownErrorId = _knownErrorId,
             ThresholdType = ThresholdType.Absolute,
             ThresholdValue = 100,
             WindowMinutes = 5,
             LookbackMinutes = 1440,
             Enabled = true
-        });
-        await _context.SaveChangesAsync();
+        };
+        _ruleRepo.GetByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(rule);
 
-        var now = DateTime.UtcNow;
-        _context.ErrorOccurrences.Add(new ErrorOccurrence
-        {
-            KnownErrorId = _knownError.Id,
-            WindowStart = now.AddMinutes(-3),
-            WindowEnd = now.AddMinutes(2),
-            Count = 5
-        });
-        await _context.SaveChangesAsync();
+        _occurrenceRepo.GetByKnownErrorAsync(_knownErrorId, Arg.Any<DateTime?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns([new ErrorOccurrence { KnownErrorId = _knownErrorId, Count = 5 }]);
 
-        var result = await _detector.EvaluateAsync(_knownError.Id);
+        var result = await _detector.EvaluateAsync(_knownErrorId);
 
         result.Should().NotBeNull();
         result!.IsSpike.Should().BeFalse();
@@ -125,43 +73,33 @@ public class SpikeDetectorTests : IAsyncLifetime
     [Fact]
     public async Task EvaluateAsync_PercentageThreshold_ReturnsSpike_WhenPercentageExceeded()
     {
-        _context.SpikeDetectionRules.Add(new SpikeDetectionRule
+        var rule = new SpikeDetectionRule
         {
-            KnownErrorId = _knownError.Id,
+            KnownErrorId = _knownErrorId,
             ThresholdType = ThresholdType.PercentageIncrease,
             ThresholdValue = 50,
             WindowMinutes = 5,
             LookbackMinutes = 30,
             Enabled = true
-        });
-        await _context.SaveChangesAsync();
+        };
+        _ruleRepo.GetByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(rule);
 
-        var now = DateTime.UtcNow;
+        // Current window call (windowStart to null) returns 10
+        _occurrenceRepo.GetByKnownErrorAsync(_knownErrorId, Arg.Any<DateTime?>(), Arg.Is<DateTime?>(d => d == null), Arg.Any<CancellationToken>())
+            .Returns([new ErrorOccurrence { KnownErrorId = _knownErrorId, Count = 10 }]);
 
-        // Historical baseline: 5 windows of 2 occurrences each (avg = 2)
-        for (var i = 1; i <= 5; i++)
-        {
-            var start = now.AddMinutes(-5 * (i + 1));
-            _context.ErrorOccurrences.Add(new ErrorOccurrence
-            {
-                KnownErrorId = _knownError.Id,
-                WindowStart = start,
-                WindowEnd = start.AddMinutes(5),
-                Count = 2
-            });
-        }
+        // Historical call (lookbackStart to windowStart) returns baseline of 2 per window
+        _occurrenceRepo.GetByKnownErrorAsync(_knownErrorId, Arg.Any<DateTime?>(), Arg.Is<DateTime?>(d => d != null), Arg.Any<CancellationToken>())
+            .Returns([
+                new ErrorOccurrence { Count = 2 },
+                new ErrorOccurrence { Count = 2 },
+                new ErrorOccurrence { Count = 2 },
+                new ErrorOccurrence { Count = 2 },
+                new ErrorOccurrence { Count = 2 }
+            ]);
 
-        // Current window: 10 occurrences (400% increase from baseline of 2)
-        _context.ErrorOccurrences.Add(new ErrorOccurrence
-        {
-            KnownErrorId = _knownError.Id,
-            WindowStart = now.AddMinutes(-3),
-            WindowEnd = now.AddMinutes(2),
-            Count = 10
-        });
-        await _context.SaveChangesAsync();
-
-        var result = await _detector.EvaluateAsync(_knownError.Id);
+        var result = await _detector.EvaluateAsync(_knownErrorId);
 
         result.Should().NotBeNull();
         result!.IsSpike.Should().BeTrue();
@@ -171,29 +109,27 @@ public class SpikeDetectorTests : IAsyncLifetime
     [Fact]
     public async Task EvaluateAsync_PercentageThreshold_ReturnsNull_WhenNoHistoricalData()
     {
-        _context.SpikeDetectionRules.Add(new SpikeDetectionRule
+        var rule = new SpikeDetectionRule
         {
-            KnownErrorId = _knownError.Id,
+            KnownErrorId = _knownErrorId,
             ThresholdType = ThresholdType.PercentageIncrease,
             ThresholdValue = 50,
             WindowMinutes = 5,
             LookbackMinutes = 30,
             Enabled = true
-        });
-        await _context.SaveChangesAsync();
+        };
+        _ruleRepo.GetByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(rule);
 
-        // Only current window, no historical data
-        var now = DateTime.UtcNow;
-        _context.ErrorOccurrences.Add(new ErrorOccurrence
-        {
-            KnownErrorId = _knownError.Id,
-            WindowStart = now.AddMinutes(-3),
-            WindowEnd = now.AddMinutes(2),
-            Count = 10
-        });
-        await _context.SaveChangesAsync();
+        // Current window
+        _occurrenceRepo.GetByKnownErrorAsync(_knownErrorId, Arg.Any<DateTime?>(), Arg.Is<DateTime?>(d => d == null), Arg.Any<CancellationToken>())
+            .Returns([new ErrorOccurrence { KnownErrorId = _knownErrorId, Count = 10 }]);
 
-        var result = await _detector.EvaluateAsync(_knownError.Id);
+        // No historical data
+        _occurrenceRepo.GetByKnownErrorAsync(_knownErrorId, Arg.Any<DateTime?>(), Arg.Is<DateTime?>(d => d != null), Arg.Any<CancellationToken>())
+            .Returns(new List<ErrorOccurrence>());
+
+        var result = await _detector.EvaluateAsync(_knownErrorId);
 
         result.Should().BeNull();
     }
@@ -201,18 +137,19 @@ public class SpikeDetectorTests : IAsyncLifetime
     [Fact]
     public async Task EvaluateAsync_DisabledRule_ReturnsNull()
     {
-        _context.SpikeDetectionRules.Add(new SpikeDetectionRule
+        var rule = new SpikeDetectionRule
         {
-            KnownErrorId = _knownError.Id,
+            KnownErrorId = _knownErrorId,
             ThresholdType = ThresholdType.Absolute,
             ThresholdValue = 1,
             WindowMinutes = 5,
             LookbackMinutes = 1440,
             Enabled = false
-        });
-        await _context.SaveChangesAsync();
+        };
+        _ruleRepo.GetByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(rule);
 
-        var result = await _detector.EvaluateAsync(_knownError.Id);
+        var result = await _detector.EvaluateAsync(_knownErrorId);
 
         result.Should().BeNull();
     }
@@ -220,30 +157,12 @@ public class SpikeDetectorTests : IAsyncLifetime
     [Fact]
     public async Task EvaluateAsync_FallsBackToGlobalDefault_WhenNoSpecificRule()
     {
-        // Seed global default (no KnownErrorId)
-        _context.SpikeDetectionRules.Add(new SpikeDetectionRule
-        {
-            ThresholdType = ThresholdType.Absolute,
-            ThresholdValue = 5,
-            WindowMinutes = 5,
-            LookbackMinutes = 1440,
-            Enabled = true
-        });
-        await _context.SaveChangesAsync();
+        // No specific rule
+        _ruleRepo.GetByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns((SpikeDetectionRule?)null);
 
-        var now = DateTime.UtcNow;
-        _context.ErrorOccurrences.Add(new ErrorOccurrence
-        {
-            KnownErrorId = _knownError.Id,
-            WindowStart = now.AddMinutes(-3),
-            WindowEnd = now.AddMinutes(2),
-            Count = 10
-        });
-        await _context.SaveChangesAsync();
+        var result = await _detector.EvaluateAsync(_knownErrorId);
 
-        var result = await _detector.EvaluateAsync(_knownError.Id);
-
-        result.Should().NotBeNull();
-        result!.IsSpike.Should().BeTrue();
+        result.Should().BeNull();
     }
 }

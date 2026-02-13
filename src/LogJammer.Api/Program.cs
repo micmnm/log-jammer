@@ -49,9 +49,10 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// Auto-migrate and seed
-using (var scope = app.Services.CreateScope())
+// Auto-migrate and seed (skip in Testing environment — tests manage their own DB)
+if (!app.Environment.IsEnvironment("Testing"))
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<LogJammerDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await db.Database.MigrateAsync();

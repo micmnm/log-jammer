@@ -13,19 +13,24 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
     private ElasticsearchContainer? _container;
     private string _baseUrl = null!;
 
-    private static bool ShouldSkip =>
-        TestDatabaseProvider.UseLocalDb && !TestDatabaseProvider.IsDockerAvailable();
-
     public async Task InitializeAsync()
     {
-        if (ShouldSkip) return;
+        Skip.IfNot(TestDatabaseProvider.IsDockerAvailable(), "Docker is not available");
 
         _container = new ElasticsearchBuilder("docker.elastic.co/elasticsearch/elasticsearch:8.17.0")
             .WithEnvironment("xpack.security.enabled", "false")
             .WithEnvironment("discovery.type", "single-node")
             .Build();
 
-        await _container.StartAsync();
+        try
+        {
+            await _container.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Skip.If(true, $"Docker container failed to start: {ex.Message}");
+        }
+
         _baseUrl = _container.GetConnectionString();
 
         // Index some test documents
@@ -69,7 +74,6 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public async Task TestConnection_ReturnsSuccess()
     {
-        Skip.If(ShouldSkip, "Docker is not available; skipping Elasticsearch tests");
 
         var adapter = new ElasticsearchAdapter(MakeConfig());
 
@@ -82,7 +86,6 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public async Task GetSampleRecords_ReturnsDocuments()
     {
-        Skip.If(ShouldSkip, "Docker is not available; skipping Elasticsearch tests");
 
         var adapter = new ElasticsearchAdapter(MakeConfig());
 
@@ -99,7 +102,6 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public async Task PollErrors_WithTimestampFilter_ReturnsFilteredResults()
     {
-        Skip.If(ShouldSkip, "Docker is not available; skipping Elasticsearch tests");
 
         var adapter = new ElasticsearchAdapter(MakeConfig());
 
@@ -112,7 +114,6 @@ public class ElasticsearchAdapterIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public async Task GetSchema_ReturnsMappingFields()
     {
-        Skip.If(ShouldSkip, "Docker is not available; skipping Elasticsearch tests");
 
         var adapter = new ElasticsearchAdapter(MakeConfig());
 

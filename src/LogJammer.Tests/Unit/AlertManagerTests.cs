@@ -1,100 +1,97 @@
 using FluentAssertions;
 using LogJammer.Core.Entities;
 using LogJammer.Core.Enums;
+using LogJammer.Core.Interfaces;
 using LogJammer.Core.Models;
-using LogJammer.Infrastructure.Data;
 using LogJammer.Infrastructure.Pipeline;
-using LogJammer.Infrastructure.Repositories;
-using LogJammer.Tests.Integration;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
 namespace LogJammer.Tests.Unit;
 
-public class AlertManagerTests : IAsyncLifetime
+public class AlertManagerTests
 {
-    private readonly DatabaseFixture _fixture = new();
-    private LogJammerDbContext _context = null!;
-    private AlertManager _manager = null!;
-    private AlertRepository _alertRepo = null!;
-    private DataSource _dataSource = null!;
-    private KnownError _knownError = null!;
+    private readonly IAlertRepository _alertRepo = Substitute.For<IAlertRepository>();
+    private readonly AlertManager _manager;
+    private readonly Guid _knownErrorId = Guid.NewGuid();
+    private readonly Guid _dataSourceId = Guid.NewGuid();
 
-    public async Task InitializeAsync()
+    public AlertManagerTests()
     {
-        await _fixture.InitializeAsync();
-        _context = _fixture.CreateDbContext();
-        await _context.Database.MigrateAsync();
-
-        _alertRepo = new AlertRepository(_context);
         _manager = new AlertManager(_alertRepo, NullLogger<AlertManager>.Instance);
-
-        _dataSource = new DataSource
-        {
-            Name = "Test Source",
-            AdapterType = AdapterType.LogFile,
-            ConnectionConfig = "{}"
-        };
-        _context.DataSources.Add(_dataSource);
-        await _context.SaveChangesAsync();
-
-        _knownError = new KnownError
-        {
-            FingerprintHash = "alert-test-hash",
-            RepresentativeMessage = "Test error",
-            DataSourceId = _dataSource.Id,
-            FirstSeen = DateTime.UtcNow,
-            LastSeen = DateTime.UtcNow,
-            TotalOccurrences = 1
-        };
-        _context.KnownErrors.Add(_knownError);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task DisposeAsync()
-    {
-        await _context.DisposeAsync();
-        await _fixture.DisposeAsync();
     }
 
     [Fact]
     public async Task ProcessSpikeResult_CreatesNewAlert_WhenNoExistingAlert()
     {
-        var result = new SpikeResult(_knownError.Id, ThresholdType.Absolute, 10, 15, true);
+        _alertRepo.GetActiveByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns((Alert?)null);
 
-        await _manager.ProcessSpikeResultAsync(result, _dataSource.Id);
+        Alert? captured = null;
+        _alertRepo.AddAsync(Arg.Any<Alert>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                captured = ci.Arg<Alert>();
+                return captured;
+            });
 
-        var alerts = await _context.Alerts.Where(a => a.KnownErrorId == _knownError.Id).ToListAsync();
-        alerts.Should().HaveCount(1);
-        alerts[0].Status.Should().Be(AlertStatus.Firing);
-        alerts[0].NotificationCount.Should().Be(1);
+        var result = new SpikeResult(_knownErrorId, ThresholdType.Absolute, 10, 15, true);
+        await _manager.ProcessSpikeResultAsync(result, _dataSourceId);
+
+        await _alertRepo.Received(1).AddAsync(Arg.Any<Alert>(), Arg.Any<CancellationToken>());
+        captured.Should().NotBeNull();
+        captured!.Status.Should().Be(AlertStatus.Firing);
+        captured.NotificationCount.Should().Be(1);
     }
 
     [Fact]
     public async Task ProcessSpikeResult_DoesNotDuplicate_WhenActiveAlertExists()
     {
-        var result = new SpikeResult(_knownError.Id, ThresholdType.Absolute, 10, 15, true);
+        var existingAlert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            KnownErrorId = _knownErrorId,
+            Status = AlertStatus.Firing,
+            ThresholdType = ThresholdType.Absolute,
+            ThresholdValue = 10,
+            ActualValue = 15,
+            NotificationCount = 1,
+            LastNotifiedAt = DateTime.UtcNow.AddMinutes(-15),
+            ConsecutiveBelowThreshold = 0
+        };
+        _alertRepo.GetActiveByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(existingAlert);
 
-        await _manager.ProcessSpikeResultAsync(result, _dataSource.Id);
-        await _manager.ProcessSpikeResultAsync(result, _dataSource.Id);
+        var result = new SpikeResult(_knownErrorId, ThresholdType.Absolute, 10, 15, true);
+        await _manager.ProcessSpikeResultAsync(result, _dataSourceId);
+        await _manager.ProcessSpikeResultAsync(result, _dataSourceId);
 
-        var alerts = await _context.Alerts.Where(a => a.KnownErrorId == _knownError.Id).ToListAsync();
-        alerts.Should().HaveCount(1);
+        await _alertRepo.DidNotReceive().AddAsync(Arg.Any<Alert>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task ProcessSpikeResult_AutoResolves_After2ConsecutiveBelowThreshold()
     {
-        // Create initial alert
-        var spikeResult = new SpikeResult(_knownError.Id, ThresholdType.Absolute, 10, 15, true);
-        await _manager.ProcessSpikeResultAsync(spikeResult, _dataSource.Id);
+        var alert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            KnownErrorId = _knownErrorId,
+            Status = AlertStatus.Firing,
+            ThresholdType = ThresholdType.Absolute,
+            ThresholdValue = 10,
+            ActualValue = 15,
+            NotificationCount = 1,
+            ConsecutiveBelowThreshold = 0
+        };
+        _alertRepo.GetActiveByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(alert);
 
-        // Two consecutive non-spike results
-        var belowResult = new SpikeResult(_knownError.Id, ThresholdType.Absolute, 10, 5, false);
-        await _manager.ProcessSpikeResultAsync(belowResult, _dataSource.Id);
-        await _manager.ProcessSpikeResultAsync(belowResult, _dataSource.Id);
+        var belowResult = new SpikeResult(_knownErrorId, ThresholdType.Absolute, 10, 5, false);
 
-        var alert = await _context.Alerts.FirstAsync(a => a.KnownErrorId == _knownError.Id);
+        await _manager.ProcessSpikeResultAsync(belowResult, _dataSourceId);
+        alert.ConsecutiveBelowThreshold.Should().Be(1);
+
+        await _manager.ProcessSpikeResultAsync(belowResult, _dataSourceId);
         alert.Status.Should().Be(AlertStatus.Resolved);
         alert.ResolvedAt.Should().NotBeNull();
     }
@@ -102,23 +99,24 @@ public class AlertManagerTests : IAsyncLifetime
     [Fact]
     public async Task ProcessSpikeResult_EscalationCapsAt5Notifications()
     {
-        // Create initial alert with high notification count
-        _context.Alerts.Add(new Alert
+        var alert = new Alert
         {
-            KnownErrorId = _knownError.Id,
+            Id = Guid.NewGuid(),
+            KnownErrorId = _knownErrorId,
             Status = AlertStatus.Firing,
             ThresholdType = ThresholdType.Absolute,
             ThresholdValue = 10,
             ActualValue = 15,
             NotificationCount = 5,
-            LastNotifiedAt = DateTime.UtcNow.AddMinutes(-15)
-        });
-        await _context.SaveChangesAsync();
+            LastNotifiedAt = DateTime.UtcNow.AddMinutes(-15),
+            ConsecutiveBelowThreshold = 0
+        };
+        _alertRepo.GetActiveByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(alert);
 
-        var result = new SpikeResult(_knownError.Id, ThresholdType.Absolute, 10, 20, true);
-        await _manager.ProcessSpikeResultAsync(result, _dataSource.Id);
+        var result = new SpikeResult(_knownErrorId, ThresholdType.Absolute, 10, 20, true);
+        await _manager.ProcessSpikeResultAsync(result, _dataSourceId);
 
-        var alert = await _context.Alerts.FirstAsync(a => a.KnownErrorId == _knownError.Id);
         alert.Status.Should().Be(AlertStatus.FiringSuppressed);
         alert.NotificationCount.Should().Be(5);
     }
@@ -126,51 +124,64 @@ public class AlertManagerTests : IAsyncLifetime
     [Fact]
     public async Task Acknowledge_StopsNotifications()
     {
-        _context.Alerts.Add(new Alert
+        var alertId = Guid.NewGuid();
+        var alert = new Alert
         {
-            KnownErrorId = _knownError.Id,
+            Id = alertId,
+            KnownErrorId = _knownErrorId,
             Status = AlertStatus.Firing,
             ThresholdType = ThresholdType.Absolute,
             ThresholdValue = 10,
             ActualValue = 15,
             NotificationCount = 2,
-            LastNotifiedAt = DateTime.UtcNow.AddMinutes(-15)
-        });
-        await _context.SaveChangesAsync();
+            LastNotifiedAt = DateTime.UtcNow.AddMinutes(-15),
+            ConsecutiveBelowThreshold = 0
+        };
+        _alertRepo.GetByIdAsync(alertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _alertRepo.GetActiveByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(alert);
 
-        var alert = await _context.Alerts.FirstAsync(a => a.KnownErrorId == _knownError.Id);
-        await _manager.AcknowledgeAsync(alert.Id);
+        await _manager.AcknowledgeAsync(alertId);
 
-        var updated = await _context.Alerts.FirstAsync(a => a.Id == alert.Id);
-        updated.Status.Should().Be(AlertStatus.Acknowledged);
-        updated.AcknowledgedAt.Should().NotBeNull();
+        alert.Status.Should().Be(AlertStatus.Acknowledged);
+        alert.AcknowledgedAt.Should().NotBeNull();
 
         // Further spike should not escalate
-        var result = new SpikeResult(_knownError.Id, ThresholdType.Absolute, 10, 20, true);
-        await _manager.ProcessSpikeResultAsync(result, _dataSource.Id);
+        var result = new SpikeResult(_knownErrorId, ThresholdType.Absolute, 10, 20, true);
+        await _manager.ProcessSpikeResultAsync(result, _dataSourceId);
 
-        var afterEscalation = await _context.Alerts.FirstAsync(a => a.Id == alert.Id);
-        afterEscalation.Status.Should().Be(AlertStatus.Acknowledged);
-        afterEscalation.NotificationCount.Should().Be(2);
+        alert.Status.Should().Be(AlertStatus.Acknowledged);
+        alert.NotificationCount.Should().Be(2);
     }
 
     [Fact]
     public async Task ProcessSpikeResult_ResetsConsecutiveBelowThreshold_OnNewSpike()
     {
-        var spikeResult = new SpikeResult(_knownError.Id, ThresholdType.Absolute, 10, 15, true);
-        await _manager.ProcessSpikeResultAsync(spikeResult, _dataSource.Id);
+        var alert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            KnownErrorId = _knownErrorId,
+            Status = AlertStatus.Firing,
+            ThresholdType = ThresholdType.Absolute,
+            ThresholdValue = 10,
+            ActualValue = 15,
+            NotificationCount = 1,
+            LastNotifiedAt = DateTime.UtcNow.AddMinutes(-15),
+            ConsecutiveBelowThreshold = 0
+        };
+        _alertRepo.GetActiveByKnownErrorIdAsync(_knownErrorId, Arg.Any<CancellationToken>())
+            .Returns(alert);
 
         // One below threshold
-        var belowResult = new SpikeResult(_knownError.Id, ThresholdType.Absolute, 10, 5, false);
-        await _manager.ProcessSpikeResultAsync(belowResult, _dataSource.Id);
-
-        var alert = await _context.Alerts.FirstAsync(a => a.KnownErrorId == _knownError.Id);
+        var belowResult = new SpikeResult(_knownErrorId, ThresholdType.Absolute, 10, 5, false);
+        await _manager.ProcessSpikeResultAsync(belowResult, _dataSourceId);
         alert.ConsecutiveBelowThreshold.Should().Be(1);
 
         // Spike again - should reset counter
-        await _manager.ProcessSpikeResultAsync(spikeResult, _dataSource.Id);
+        var spikeResult = new SpikeResult(_knownErrorId, ThresholdType.Absolute, 10, 15, true);
+        await _manager.ProcessSpikeResultAsync(spikeResult, _dataSourceId);
 
-        alert = await _context.Alerts.FirstAsync(a => a.KnownErrorId == _knownError.Id);
         alert.ConsecutiveBelowThreshold.Should().Be(0);
         alert.Status.Should().NotBe(AlertStatus.Resolved);
     }
