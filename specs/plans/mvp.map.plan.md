@@ -4,11 +4,11 @@
 
 | Decision | Choice |
 |----------|--------|
-| Backend | .NET 8+ / C# |
-| Frontend | React + MUI (Material UI) + Chart.js (react-chartjs-2) |
+| Backend | .NET 10 / C# 13 |
+| Frontend | React 19 + MUI 7 + Chart.js 4 + TanStack Query 5 |
 | ML Model | ONNX Runtime + all-MiniLM-L6-v2 |
-| Database | PostgreSQL + pgvector |
-| Deployment | docker-compose (app + PostgreSQL separate containers) |
+| Database | PostgreSQL 17 + pgvector |
+| Deployment | docker-compose (single container API+SPA + PostgreSQL) |
 | Adapters (MVP) | Elasticsearch/OpenSearch, PostgreSQL, Log files (JSON + regex) |
 | Auth | None (internal tool) |
 | Retention | 30 days occurrences / error library indefinite |
@@ -19,14 +19,14 @@
 
 | # | Phase | Plan File | Status |
 |---|-------|-----------|--------|
-| 1 | Foundation & Project Structure | [phase1-foundation.plan.md](phase1-foundation.plan.md) | draft |
-| 2 | Data Source Adapters | [phase2-adapters.plan.md](phase2-adapters.plan.md) | draft |
-| 3 | Error Processing Pipeline | [phase3-pipeline.plan.md](phase3-pipeline.plan.md) | draft |
-| 4 | ML Classification | [phase4-ml-classification.plan.md](phase4-ml-classification.plan.md) | draft |
-| 5 | Spike Detection & Alerts | [phase5-spike-detection.plan.md](phase5-spike-detection.plan.md) | draft |
-| 6 | Frontend - Dashboard | [phase6-frontend-dashboard.plan.md](phase6-frontend-dashboard.plan.md) | draft |
-| 7 | Frontend - Configuration | [phase7-frontend-config.plan.md](phase7-frontend-config.plan.md) | draft |
-| 8 | Docker, Integration & Polish | [phase8-docker-integration.plan.md](phase8-docker-integration.plan.md) | draft |
+| 1 | Foundation & Project Structure | [phase1-foundation.done.md](phase1-foundation.done.md) | done |
+| 2 | Data Source Adapters | [phase2-adapters.done.md](phase2-adapters.done.md) | done |
+| 3 | Error Processing Pipeline | [phase3-pipeline.done.md](phase3-pipeline.done.md) | done |
+| 4 | ML Classification | [phase4-ml-classification.done.md](phase4-ml-classification.done.md) | done |
+| 5 | Spike Detection & Alerts | [phase5-spike-detection.done.md](phase5-spike-detection.done.md) | done |
+| 6 | Frontend - Dashboard | [phase6-frontend-dashboard.done.md](phase6-frontend-dashboard.done.md) | done |
+| 7 | Frontend - Configuration | [phase7-frontend-config.done.md](phase7-frontend-config.done.md) | done |
+| 8 | Docker & Production Build | [phase8-docker-integration.done.md](phase8-docker-integration.done.md) | done |
 
 ---
 

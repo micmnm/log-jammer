@@ -1,4 +1,6 @@
 services:
   api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
     volumes:
       - ./data:/app/data

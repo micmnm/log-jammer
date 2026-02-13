@@ -88,6 +88,16 @@ Base URL: `http://localhost:5000`
 | POST | `/api/classification/queue/{id}/approve` | Accept suggested tags | Implemented |
 | POST | `/api/classification/queue/{id}/reject` | Reject with user-provided tags | Implemented |
 
+## Static Files & SPA
+
+| Path | Description |
+|------|-------------|
+| `/` | Serves `wwwroot/index.html` (React SPA entry point) |
+| `/assets/*` | Static frontend assets (JS, CSS) from `wwwroot/` |
+| `/*` (non-API, non-file) | Falls back to `index.html` for client-side routing |
+
+Middleware order: `UseDefaultFiles()` → `UseStaticFiles()` → `MapControllers()` → `MapFallbackToFile("index.html")`
+
 ## CORS
 
 | Origin | Methods | Status |

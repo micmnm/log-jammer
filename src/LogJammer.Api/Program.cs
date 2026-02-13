@@ -69,8 +69,13 @@ app.MapScalarApiReference(options =>
 
 app.UseCors("DevCors");
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.MapControllers();
 app.MapHealthChecks("/healthz");
+
+app.MapFallbackToFile("index.html");
 
 app.Run();
 

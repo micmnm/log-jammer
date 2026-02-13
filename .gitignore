@@ -425,5 +425,8 @@ data/
 .idea/
 **/.idea/
 
+# ONNX models (downloaded at runtime)
+**/models/
+
 # Claude
 .claude/
