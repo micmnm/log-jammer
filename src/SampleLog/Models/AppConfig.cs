@@ -11,7 +11,9 @@ public sealed class OutputConfig
 public sealed class DefaultsConfig
 {
     public bool BaselineEnabled { get; set; } = true;
-    public int BaselineRatePerSecond { get; set; } = 2;
+    public int InfoRatePerSecond { get; set; } = 2;
+    public int WarnRatePerSecond { get; set; } = 0;
+    public int ErrorRatePerSecond { get; set; } = 0;
     public int SpikeCount { get; set; } = 50;
     public int SpikeDurationSeconds { get; set; } = 10;
     public int DegradationDurationSeconds { get; set; } = 120;

@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Text;
 using SampleLog.Generation;
 using SampleLog.Generation.Scenarios;
@@ -7,7 +6,7 @@ using Terminal.Gui;
 
 namespace SampleLog.UI;
 
-public sealed class MainWindow : Window
+public sealed class MainWindow : Toplevel
 {
     private readonly LogGenerator _generator;
     private readonly ScenarioRunner _runner;
@@ -36,83 +35,90 @@ public sealed class MainWindow : Window
         _runner = runner;
         _defaults = defaults;
 
-        Title = "SampleLog Generator (Q to quit)";
-        ColorScheme = Colors.ColorSchemes["Base"];
+        // Use terminal-native colors (white on black)
+        var attr = new Terminal.Gui.Attribute(Color.White, Color.Black);
+        var dimAttr = new Terminal.Gui.Attribute(Color.Gray, Color.Black);
+        var terminalScheme = new ColorScheme(
+            normal: attr, focus: attr, hotNormal: attr, hotFocus: attr, disabled: dimAttr);
+        ColorScheme = terminalScheme;
 
-        // --- Log output frame (top ~70%) ---
-        var logFrame = new FrameView
-        {
-            Title = "Log Output",
-            X = 0,
-            Y = 0,
-            Width = Dim.Fill(),
-            Height = Dim.Percent(70)
-        };
-
+        // Log output (top, fills most of screen)
         _logView = new TextView
         {
             X = 0,
             Y = 0,
             Width = Dim.Fill(),
-            Height = Dim.Fill(),
+            Height = Dim.Fill(10),
             ReadOnly = true
         };
-        logFrame.Add(_logView);
 
-        // --- Status bar (1 line) ---
+        // Status line
         _statusLabel = new Label
         {
-            Text = "Baseline: OFF | Active: none | Total: 0 | Rate: 0/sec",
+            Text = "Baseline: OFF | Total: 0 | Rate: 0/sec",
             X = 0,
-            Y = Pos.Bottom(logFrame),
+            Y = Pos.Bottom(_logView),
             Width = Dim.Fill(),
             Height = 1
         };
 
-        // --- Command frame (bottom) ---
-        var cmdFrame = new FrameView
+        // Separator
+        var separator = new Label
         {
-            Title = "Commands",
+            Text = new string('-', 120),
             X = 0,
             Y = Pos.Bottom(_statusLabel),
+            Width = Dim.Fill(),
+            Height = 1
+        };
+
+        // Menu table
+        var menuView = new View
+        {
+            X = 0,
+            Y = Pos.Bottom(separator),
             Width = Dim.Fill(),
             Height = Dim.Fill()
         };
 
-        var cmdText = new Label
+        var col1 = new Label
         {
-            Text = "[1] Toggle Baseline  [2] Spike  [3] Degradation  [4] Correlated  [5] Rate  [6] Volume  [7] Stop All  [Q] Quit",
-            X = 0,
-            Y = 0,
-            Width = Dim.Fill(),
-            Height = 1
+            Text = " 1  Toggle baseline        5  Rates (inf/wrn/err)",
+            X = 0, Y = 0, Width = Dim.Fill()
         };
-        cmdFrame.Add(cmdText);
+        var col2 = new Label
+        {
+            Text = " 2  Spike burst            6  Volume/load test",
+            X = 0, Y = 1, Width = Dim.Fill()
+        };
+        var col3 = new Label
+        {
+            Text = " 3  Gradual degradation    7  Stop all",
+            X = 0, Y = 2, Width = Dim.Fill()
+        };
+        var col4 = new Label
+        {
+            Text = " 4  Correlated failures    Q  Quit",
+            X = 0, Y = 3, Width = Dim.Fill()
+        };
 
-        Add(logFrame, _statusLabel, cmdFrame);
+        menuView.Add(col1, col2, col3, col4);
 
-        // Wire log events
+        Add(_logView, _statusLabel, separator, menuView);
+
+        // Wire events
         _generator.OnLogEmitted += OnLogEmitted;
-
-        // Wire scenario error events to display in log view
         _runner.OnScenarioError += OnScenarioError;
 
-        // Start timer for status updates (also cleans up completed scenarios)
+        // Timers
         _statusTimerToken = Application.AddTimeout(TimeSpan.FromMilliseconds(500), UpdateStatus);
-
-        // Start timer for throttled log view flushes
         _logFlushTimerToken = Application.AddTimeout(TimeSpan.FromMilliseconds(100), FlushLogBuffer);
 
         // Auto-start baseline if configured
         if (_defaults.BaselineEnabled)
-        {
             StartBaseline();
-        }
     }
 
-    /// <summary>
-    /// Handle keyboard shortcuts at the window level.
-    /// </summary>
     protected override bool OnKeyDown(Key key)
     {
         switch (key.KeyCode)
@@ -130,7 +136,7 @@ public sealed class MainWindow : Window
                 ShowCorrelatedDialog();
                 return true;
             case KeyCode.D5:
-                ShowRateDialog();
+                ShowRatesDialog();
                 return true;
             case KeyCode.D6:
                 ShowVolumeDialog();
@@ -176,22 +182,17 @@ public sealed class MainWindow : Window
         _logLines.AddRange(_pendingLines);
         _pendingLines.Clear();
 
-        // Trim to max lines
         if (_logLines.Count > MaxLogLines)
-        {
             _logLines.RemoveRange(0, _logLines.Count - MaxLogLines);
-        }
 
         var sb = new StringBuilder();
         foreach (var l in _logLines)
-        {
             sb.AppendLine(l);
-        }
 
         _logView.Text = sb.ToString();
         _logView.MoveEnd();
 
-        return true; // keep timer running
+        return true;
     }
 
     private bool UpdateStatus()
@@ -210,23 +211,33 @@ public sealed class MainWindow : Window
             _lastRateCheck = now;
         }
 
-        var baselineStatus = _baselineRunning
-            ? $"ON ({_baselineScenario?.RatePerSecond ?? 0}/sec)"
-            : "OFF";
+        var parts = new List<string>();
 
-        var activeNames = _runner.ActiveScenarios.Count > 0
-            ? string.Join(", ", _runner.ActiveScenarios.Keys)
-            : "none";
+        if (_baselineRunning && _baselineScenario is not null)
+            parts.Add($"Baseline: INF:{_baselineScenario.InfoRate}/s WRN:{_baselineScenario.WarnRate}/s ERR:{_baselineScenario.ErrorRate}/s");
+        else
+            parts.Add("Baseline: OFF");
 
-        _statusLabel.Text =
-            $"Baseline: {baselineStatus} | Active: {activeNames} | Total: {currentCount} | Rate: {_currentRate:F1}/sec";
+        var active = _runner.ActiveScenarios;
+        var others = active.Keys.Where(k => k != "Baseline").ToList();
+        if (others.Count > 0)
+            parts.Add($"Active: {string.Join(", ", others)}");
 
-        return true; // keep timer running
+        parts.Add($"Total: {currentCount}");
+        parts.Add($"Rate: {_currentRate:F1}/sec");
+
+        _statusLabel.Text = string.Join(" | ", parts);
+
+        return true;
     }
 
     private void StartBaseline()
     {
-        _baselineScenario = new BaselineScenario(_generator, _defaults.BaselineRatePerSecond);
+        _baselineScenario = new BaselineScenario(
+            _generator,
+            _defaults.InfoRatePerSecond,
+            _defaults.WarnRatePerSecond,
+            _defaults.ErrorRatePerSecond);
         _runner.Start(_baselineScenario);
         _baselineRunning = true;
     }
@@ -252,11 +263,80 @@ public sealed class MainWindow : Window
         _baselineScenario = null;
     }
 
+    private void ShowRatesDialog()
+    {
+        var dialog = new Dialog
+        {
+            Title = "Baseline Rates",
+            Width = 40,
+            Height = 12
+        };
+
+        var currentInfo = _baselineScenario?.InfoRate ?? _defaults.InfoRatePerSecond;
+        var currentWarn = _baselineScenario?.WarnRate ?? _defaults.WarnRatePerSecond;
+        var currentErr = _baselineScenario?.ErrorRate ?? _defaults.ErrorRatePerSecond;
+
+        var infoLabel = new Label { Text = "Info /sec:", X = 1, Y = 1 };
+        var infoField = new TextField { X = 14, Y = 1, Width = 8, Text = currentInfo.ToString() };
+        var warnLabel = new Label { Text = "Warn /sec:", X = 1, Y = 3 };
+        var warnField = new TextField { X = 14, Y = 3, Width = 8, Text = currentWarn.ToString() };
+        var errLabel = new Label { Text = "Error /sec:", X = 1, Y = 5 };
+        var errField = new TextField { X = 14, Y = 5, Width = 8, Text = currentErr.ToString() };
+
+        var okButton = new Button { Text = "OK", IsDefault = true };
+        okButton.Accepting += (s, e) =>
+        {
+            e.Cancel = true;
+
+            if (!int.TryParse(infoField.Text?.Trim(), out var info)
+                || !int.TryParse(warnField.Text?.Trim(), out var warn)
+                || !int.TryParse(errField.Text?.Trim(), out var err))
+            {
+                MessageBox.ErrorQuery("Invalid Input", "All rates must be valid integers.", "OK");
+                return;
+            }
+
+            if (info < 0 || warn < 0 || err < 0)
+            {
+                MessageBox.ErrorQuery("Invalid Input", "Rates cannot be negative.", "OK");
+                return;
+            }
+
+            if (_baselineRunning && _baselineScenario is not null)
+            {
+                _baselineScenario.InfoRate = info;
+                _baselineScenario.WarnRate = warn;
+                _baselineScenario.ErrorRate = err;
+            }
+            else
+            {
+                _defaults.InfoRatePerSecond = info;
+                _defaults.WarnRatePerSecond = warn;
+                _defaults.ErrorRatePerSecond = err;
+            }
+
+            Application.RequestStop();
+        };
+
+        var cancelButton = new Button { Text = "Cancel" };
+        cancelButton.Accepting += (s, e) =>
+        {
+            e.Cancel = true;
+            Application.RequestStop();
+        };
+
+        dialog.Add(infoLabel, infoField, warnLabel, warnField, errLabel, errField);
+        dialog.AddButton(okButton);
+        dialog.AddButton(cancelButton);
+        Application.Run(dialog);
+        dialog.Dispose();
+    }
+
     private void ShowSpikeDialog()
     {
         var dialog = new Dialog
         {
-            Title = "Trigger Spike",
+            Title = "Spike Burst",
             Width = 50,
             Height = 12
         };
@@ -316,7 +396,7 @@ public sealed class MainWindow : Window
     {
         var dialog = new Dialog
         {
-            Title = "Trigger Degradation",
+            Title = "Gradual Degradation",
             Width = 50,
             Height = 12
         };
@@ -377,7 +457,7 @@ public sealed class MainWindow : Window
 
         var dialog = new Dialog
         {
-            Title = "Trigger Correlated",
+            Title = "Correlated Failures",
             Width = 55,
             Height = 14
         };
@@ -390,7 +470,7 @@ public sealed class MainWindow : Window
             Y = 1,
             Width = 35,
             Height = Math.Min(groups.Count, 5),
-            Source = new ListWrapper<string>(new ObservableCollection<string>(groupNames))
+            Source = new ListWrapper<string>(new System.Collections.ObjectModel.ObservableCollection<string>(groupNames))
         };
         groupList.SelectedItem = 0;
 
@@ -444,64 +524,11 @@ public sealed class MainWindow : Window
         dialog.Dispose();
     }
 
-    private void ShowRateDialog()
-    {
-        if (!_baselineRunning || _baselineScenario is null)
-        {
-            MessageBox.ErrorQuery("No Baseline", "Baseline is not running. Press 1 to start it first.", "OK");
-            return;
-        }
-
-        var dialog = new Dialog
-        {
-            Title = "Change Baseline Rate",
-            Width = 45,
-            Height = 8
-        };
-
-        var rateLabel = new Label { Text = "New rate/sec:", X = 1, Y = 1 };
-        var rateField = new TextField { X = 16, Y = 1, Width = 10, Text = _baselineScenario.RatePerSecond.ToString() };
-
-        var okButton = new Button { Text = "OK", IsDefault = true };
-        okButton.Accepting += (s, e) =>
-        {
-            e.Cancel = true;
-
-            if (!int.TryParse(rateField.Text?.Trim(), out var newRate))
-            {
-                MessageBox.ErrorQuery("Invalid Input", "Rate must be a valid integer.", "OK");
-                return;
-            }
-
-            if (newRate <= 0)
-            {
-                MessageBox.ErrorQuery("Invalid Input", "Rate must be greater than 0.", "OK");
-                return;
-            }
-
-            _baselineScenario!.RatePerSecond = newRate;
-            Application.RequestStop();
-        };
-
-        var cancelButton = new Button { Text = "Cancel" };
-        cancelButton.Accepting += (s, e) =>
-        {
-            e.Cancel = true;
-            Application.RequestStop();
-        };
-
-        dialog.Add(rateLabel, rateField);
-        dialog.AddButton(okButton);
-        dialog.AddButton(cancelButton);
-        Application.Run(dialog);
-        dialog.Dispose();
-    }
-
     private void ShowVolumeDialog()
     {
         var dialog = new Dialog
         {
-            Title = "Trigger Volume",
+            Title = "Volume/Load Test",
             Width = 45,
             Height = 10
         };

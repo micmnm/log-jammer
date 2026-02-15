@@ -46,6 +46,18 @@ public sealed class LogGenerator : IDisposable
         EmitTemplateInternal(template);
     }
 
+    public void EmitRandomAtLevel(string level)
+    {
+        var candidates = _library.Templates
+            .Where(t => t.Level.Equals(level, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (candidates.Count == 0) return;
+
+        var template = candidates[Random.Shared.Next(candidates.Count)];
+        EmitTemplateInternal(template);
+    }
+
     public void EmitTemplate(string templateId)
     {
         var template = _library.Templates.FirstOrDefault(t => t.Id == templateId)
