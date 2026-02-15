@@ -48,8 +48,9 @@ public sealed class MainWindow : Toplevel
             X = 0,
             Y = 0,
             Width = Dim.Fill(),
-            Height = Dim.Fill(10),
-            ReadOnly = true
+            Height = Dim.Fill(9),
+            ReadOnly = true,
+            CanFocus = false
         };
 
         // Status line
@@ -62,49 +63,27 @@ public sealed class MainWindow : Toplevel
             Height = 1
         };
 
-        // Separator
-        var separator = new Label
-        {
-            Text = new string('-', 120),
-            X = 0,
-            Y = Pos.Bottom(_statusLabel),
-            Width = Dim.Fill(),
-            Height = 1
-        };
-
-        // Menu table
+        // Menu area
         var menuView = new View
         {
             X = 0,
-            Y = Pos.Bottom(separator),
+            Y = Pos.Bottom(_statusLabel),
             Width = Dim.Fill(),
-            Height = Dim.Fill()
+            Height = Dim.Fill(),
+            CanFocus = false
         };
 
-        var col1 = new Label
-        {
-            Text = " 1  Toggle baseline        5  Rates (inf/wrn/err)",
-            X = 0, Y = 0, Width = Dim.Fill()
-        };
-        var col2 = new Label
-        {
-            Text = " 2  Spike burst            6  Volume/load test",
-            X = 0, Y = 1, Width = Dim.Fill()
-        };
-        var col3 = new Label
-        {
-            Text = " 3  Gradual degradation    7  Stop all",
-            X = 0, Y = 2, Width = Dim.Fill()
-        };
-        var col4 = new Label
-        {
-            Text = " 4  Correlated failures    Q  Quit",
-            X = 0, Y = 3, Width = Dim.Fill()
-        };
+        var sep = new Label { Text = new string('=', 120), X = 0, Y = 0, Width = Dim.Fill() };
+        var row1 = new Label { Text = "  [1] Toggle baseline     [5] Rates (inf/wrn/err)", X = 0, Y = 1, Width = Dim.Fill() };
+        var row2 = new Label { Text = "  [2] Spike burst         [6] Volume/load test", X = 0, Y = 2, Width = Dim.Fill() };
+        var row3 = new Label { Text = "  [3] Gradual degradation [7] Stop all", X = 0, Y = 3, Width = Dim.Fill() };
+        var row4 = new Label { Text = "  [4] Correlated failures [Q] Quit", X = 0, Y = 4, Width = Dim.Fill() };
+        var sep2 = new Label { Text = new string('=', 120), X = 0, Y = 5, Width = Dim.Fill() };
+        var prompt = new Label { Text = "  Press a key (1-7, Q):", X = 0, Y = 6, Width = Dim.Fill() };
 
-        menuView.Add(col1, col2, col3, col4);
+        menuView.Add(sep, row1, row2, row3, row4, sep2, prompt);
 
-        Add(_logView, _statusLabel, separator, menuView);
+        Add(_logView, _statusLabel, menuView);
 
         // Wire events
         _generator.OnLogEmitted += OnLogEmitted;
