@@ -433,3 +433,6 @@ data/
 
 # Claude
 .claude/
+
+# SampleLog generated output
+src/SampleLog/logs/
