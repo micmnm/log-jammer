@@ -430,6 +430,7 @@ data/
 
 # ONNX models (downloaded at runtime)
 **/models/
+!**/Models/
 
 # Claude
 .claude/
