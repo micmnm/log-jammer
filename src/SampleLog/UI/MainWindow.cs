@@ -17,7 +17,9 @@ public sealed class MainWindow : Window
     private readonly Label _statusLabel;
 
     private readonly List<string> _logLines = [];
+    private readonly List<string> _pendingLines = [];
     private const int MaxLogLines = 500;
+    private bool _logDirty;
 
     private long _lastEmittedCount;
     private DateTime _lastRateCheck = DateTime.UtcNow;
@@ -25,7 +27,8 @@ public sealed class MainWindow : Window
 
     private BaselineScenario? _baselineScenario;
     private bool _baselineRunning;
-    private object? _timerToken;
+    private object? _statusTimerToken;
+    private object? _logFlushTimerToken;
 
     public MainWindow(LogGenerator generator, ScenarioRunner runner, DefaultsConfig defaults)
     {
@@ -91,8 +94,14 @@ public sealed class MainWindow : Window
         // Wire log events
         _generator.OnLogEmitted += OnLogEmitted;
 
-        // Start timer for status updates
-        _timerToken = Application.AddTimeout(TimeSpan.FromMilliseconds(500), UpdateStatus);
+        // Wire scenario error events to display in log view
+        _runner.OnScenarioError += OnScenarioError;
+
+        // Start timer for status updates (also cleans up completed scenarios)
+        _statusTimerToken = Application.AddTimeout(TimeSpan.FromMilliseconds(500), UpdateStatus);
+
+        // Start timer for throttled log view flushes
+        _logFlushTimerToken = Application.AddTimeout(TimeSpan.FromMilliseconds(100), FlushLogBuffer);
 
         // Auto-start baseline if configured
         if (_defaults.BaselineEnabled)
@@ -143,25 +152,52 @@ public sealed class MainWindow : Window
     {
         Application.Invoke(() =>
         {
-            _logLines.Add(line);
-            while (_logLines.Count > MaxLogLines)
-            {
-                _logLines.RemoveAt(0);
-            }
-
-            var sb = new StringBuilder();
-            foreach (var l in _logLines)
-            {
-                sb.AppendLine(l);
-            }
-
-            _logView.Text = sb.ToString();
-            _logView.MoveEnd();
+            _pendingLines.Add(line);
+            _logDirty = true;
         });
+    }
+
+    private void OnScenarioError(string errorMessage)
+    {
+        Application.Invoke(() =>
+        {
+            _pendingLines.Add($"{DateTime.Now:HH:mm:ss} ERR  [scenario] {errorMessage}");
+            _logDirty = true;
+        });
+    }
+
+    private bool FlushLogBuffer()
+    {
+        if (!_logDirty)
+            return true;
+
+        _logDirty = false;
+
+        _logLines.AddRange(_pendingLines);
+        _pendingLines.Clear();
+
+        // Trim to max lines
+        if (_logLines.Count > MaxLogLines)
+        {
+            _logLines.RemoveRange(0, _logLines.Count - MaxLogLines);
+        }
+
+        var sb = new StringBuilder();
+        foreach (var l in _logLines)
+        {
+            sb.AppendLine(l);
+        }
+
+        _logView.Text = sb.ToString();
+        _logView.MoveEnd();
+
+        return true; // keep timer running
     }
 
     private bool UpdateStatus()
     {
+        _runner.ClearCompleted();
+
         var now = DateTime.UtcNow;
         var elapsed = (now - _lastRateCheck).TotalSeconds;
         var currentCount = _generator.EmittedCount;
@@ -235,16 +271,30 @@ public sealed class MainWindow : Window
         var okButton = new Button { Text = "OK", IsDefault = true };
         okButton.Accepting += (s, e) =>
         {
+            e.Cancel = true;
+
             var templateId = templateField.Text?.Trim() ?? "";
-            if (int.TryParse(countField.Text?.Trim(), out var count)
-                && int.TryParse(durationField.Text?.Trim(), out var duration)
-                && !string.IsNullOrEmpty(templateId))
+            if (!int.TryParse(countField.Text?.Trim(), out var count)
+                || !int.TryParse(durationField.Text?.Trim(), out var duration))
             {
-                var scenario = new SpikeScenario(_generator, templateId, count, duration);
-                _runner.Start(scenario);
+                MessageBox.ErrorQuery("Invalid Input", "Count and duration must be valid integers.", "OK");
+                return;
             }
 
-            e.Cancel = true;
+            if (count <= 0 || duration <= 0)
+            {
+                MessageBox.ErrorQuery("Invalid Input", "Count and duration must be greater than 0.", "OK");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(templateId))
+            {
+                MessageBox.ErrorQuery("Invalid Input", "Template ID is required.", "OK");
+                return;
+            }
+
+            var scenario = new SpikeScenario(_generator, templateId, count, duration);
+            _runner.Start(scenario);
             Application.RequestStop();
         };
 
@@ -281,15 +331,24 @@ public sealed class MainWindow : Window
         var okButton = new Button { Text = "OK", IsDefault = true };
         okButton.Accepting += (s, e) =>
         {
-            if (int.TryParse(startField.Text?.Trim(), out var startRate)
-                && int.TryParse(endField.Text?.Trim(), out var endRate)
-                && int.TryParse(durationField.Text?.Trim(), out var duration))
+            e.Cancel = true;
+
+            if (!int.TryParse(startField.Text?.Trim(), out var startRate)
+                || !int.TryParse(endField.Text?.Trim(), out var endRate)
+                || !int.TryParse(durationField.Text?.Trim(), out var duration))
             {
-                var scenario = new DegradationScenario(_generator, startRate, endRate, duration);
-                _runner.Start(scenario);
+                MessageBox.ErrorQuery("Invalid Input", "All fields must be valid integers.", "OK");
+                return;
             }
 
-            e.Cancel = true;
+            if (startRate <= 0 || endRate <= 0 || duration <= 0)
+            {
+                MessageBox.ErrorQuery("Invalid Input", "All values must be greater than 0.", "OK");
+                return;
+            }
+
+            var scenario = new DegradationScenario(_generator, startRate, endRate, duration);
+            _runner.Start(scenario);
             Application.RequestStop();
         };
 
@@ -343,17 +402,31 @@ public sealed class MainWindow : Window
         var okButton = new Button { Text = "OK", IsDefault = true };
         okButton.Accepting += (s, e) =>
         {
+            e.Cancel = true;
+
             var selectedIndex = groupList.SelectedItem;
-            if (selectedIndex >= 0 && selectedIndex < groups.Count
-                && int.TryParse(burstField.Text?.Trim(), out var burstCount)
-                && int.TryParse(durationField.Text?.Trim(), out var duration))
+            if (selectedIndex < 0 || selectedIndex >= groups.Count)
             {
-                var group = groups[selectedIndex];
-                var scenario = new CorrelatedScenario(_generator, group, burstCount, duration);
-                _runner.Start(scenario);
+                MessageBox.ErrorQuery("Invalid Input", "Please select a correlation group.", "OK");
+                return;
             }
 
-            e.Cancel = true;
+            if (!int.TryParse(burstField.Text?.Trim(), out var burstCount)
+                || !int.TryParse(durationField.Text?.Trim(), out var duration))
+            {
+                MessageBox.ErrorQuery("Invalid Input", "Burst count and duration must be valid integers.", "OK");
+                return;
+            }
+
+            if (burstCount <= 0 || duration <= 0)
+            {
+                MessageBox.ErrorQuery("Invalid Input", "Burst count and duration must be greater than 0.", "OK");
+                return;
+            }
+
+            var group = groups[selectedIndex];
+            var scenario = new CorrelatedScenario(_generator, group, burstCount, duration);
+            _runner.Start(scenario);
             Application.RequestStop();
         };
 
@@ -392,12 +465,21 @@ public sealed class MainWindow : Window
         var okButton = new Button { Text = "OK", IsDefault = true };
         okButton.Accepting += (s, e) =>
         {
-            if (int.TryParse(rateField.Text?.Trim(), out var newRate) && newRate > 0)
+            e.Cancel = true;
+
+            if (!int.TryParse(rateField.Text?.Trim(), out var newRate))
             {
-                _baselineScenario!.RatePerSecond = newRate;
+                MessageBox.ErrorQuery("Invalid Input", "Rate must be a valid integer.", "OK");
+                return;
             }
 
-            e.Cancel = true;
+            if (newRate <= 0)
+            {
+                MessageBox.ErrorQuery("Invalid Input", "Rate must be greater than 0.", "OK");
+                return;
+            }
+
+            _baselineScenario!.RatePerSecond = newRate;
             Application.RequestStop();
         };
 
@@ -432,14 +514,23 @@ public sealed class MainWindow : Window
         var okButton = new Button { Text = "OK", IsDefault = true };
         okButton.Accepting += (s, e) =>
         {
-            if (int.TryParse(rateField.Text?.Trim(), out var rate)
-                && int.TryParse(durationField.Text?.Trim(), out var duration))
+            e.Cancel = true;
+
+            if (!int.TryParse(rateField.Text?.Trim(), out var rate)
+                || !int.TryParse(durationField.Text?.Trim(), out var duration))
             {
-                var scenario = new VolumeScenario(_generator, rate, duration);
-                _runner.Start(scenario);
+                MessageBox.ErrorQuery("Invalid Input", "Rate and duration must be valid integers.", "OK");
+                return;
             }
 
-            e.Cancel = true;
+            if (rate <= 0 || duration <= 0)
+            {
+                MessageBox.ErrorQuery("Invalid Input", "Rate and duration must be greater than 0.", "OK");
+                return;
+            }
+
+            var scenario = new VolumeScenario(_generator, rate, duration);
+            _runner.Start(scenario);
             Application.RequestStop();
         };
 
@@ -462,11 +553,18 @@ public sealed class MainWindow : Window
         if (disposing)
         {
             _generator.OnLogEmitted -= OnLogEmitted;
+            _runner.OnScenarioError -= OnScenarioError;
 
-            if (_timerToken is not null)
+            if (_statusTimerToken is not null)
             {
-                Application.RemoveTimeout(_timerToken);
-                _timerToken = null;
+                Application.RemoveTimeout(_statusTimerToken);
+                _statusTimerToken = null;
+            }
+
+            if (_logFlushTimerToken is not null)
+            {
+                Application.RemoveTimeout(_logFlushTimerToken);
+                _logFlushTimerToken = null;
             }
 
             _runner.StopAll();

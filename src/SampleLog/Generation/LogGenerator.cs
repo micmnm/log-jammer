@@ -11,8 +11,7 @@ public sealed class LogGenerator : IDisposable
 {
     private readonly LogLibrary _library;
     private readonly Serilog.ILogger _fileLogger;
-    private readonly string _logFilePath;
-    private readonly Random _random = new();
+    private readonly StreamWriter _rawWriter;
     private long _emittedCount;
 
     public long EmittedCount => Interlocked.Read(ref _emittedCount);
@@ -23,24 +22,27 @@ public sealed class LogGenerator : IDisposable
     {
         _library = library;
 
-        _logFilePath = Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}.txt");
+        var logFilePath = Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}.txt");
+        var rawFilePath = Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}-raw.txt");
         Directory.CreateDirectory(outputConfig.Directory);
 
         _fileLogger = new LoggerConfiguration()
             .MinimumLevel.Verbose()
             .WriteTo.File(
                 new CompactJsonFormatter(),
-                _logFilePath,
+                logFilePath,
                 rollingInterval: RollingInterval.Infinite,
                 rollOnFileSizeLimit: true,
                 fileSizeLimitBytes: outputConfig.RollingSizeMB * 1024L * 1024L,
                 retainedFileCountLimit: outputConfig.MaxFiles)
             .CreateLogger();
+
+        _rawWriter = new StreamWriter(rawFilePath, append: true) { AutoFlush = true };
     }
 
     public void EmitRandom()
     {
-        var template = _library.Templates[_random.Next(_library.Templates.Count)];
+        var template = _library.Templates[Random.Shared.Next(_library.Templates.Count)];
         EmitTemplateInternal(template);
     }
 
@@ -58,7 +60,7 @@ public sealed class LogGenerator : IDisposable
 
         var raw = entry.Raw.Replace("{{timestamp}}", DateTime.UtcNow.ToString("O"));
 
-        File.AppendAllText(_logFilePath, raw + Environment.NewLine);
+        _rawWriter.WriteLine(raw);
 
         var displayLine = $"{DateTime.Now:HH:mm:ss} {FormatLevelShort(entry.Level),-4} [prebaked] {entry.Id}";
         OnLogEmitted?.Invoke(displayLine);
@@ -68,6 +70,7 @@ public sealed class LogGenerator : IDisposable
 
     public void Dispose()
     {
+        _rawWriter.Dispose();
         (_fileLogger as IDisposable)?.Dispose();
     }
 
@@ -79,7 +82,7 @@ public sealed class LogGenerator : IDisposable
         {
             foreach (var (key, values) in template.Properties)
             {
-                var rawValue = values[_random.Next(values.Count)];
+                var rawValue = values[Random.Shared.Next(values.Count)];
                 resolvedProperties[key] = ResolveJsonElement(rawValue);
             }
         }
