@@ -17,27 +17,29 @@ public sealed class LogGenerator : IDisposable
     public long EmittedCount => Interlocked.Read(ref _emittedCount);
     public event Action<string>? OnLogEmitted;
     public LogLibrary Library => _library;
+    public string LogFilePath { get; }
+    public string RawFilePath { get; }
 
     public LogGenerator(LogLibrary library, OutputConfig outputConfig)
     {
         _library = library;
 
-        var logFilePath = Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}.txt");
-        var rawFilePath = Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}-raw.txt");
+        LogFilePath = Path.GetFullPath(Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}.txt"));
+        RawFilePath = Path.GetFullPath(Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}-raw.txt"));
         Directory.CreateDirectory(outputConfig.Directory);
 
         _fileLogger = new LoggerConfiguration()
             .MinimumLevel.Verbose()
             .WriteTo.File(
                 new CompactJsonFormatter(),
-                logFilePath,
+                LogFilePath,
                 rollingInterval: RollingInterval.Infinite,
                 rollOnFileSizeLimit: true,
                 fileSizeLimitBytes: outputConfig.RollingSizeMB * 1024L * 1024L,
                 retainedFileCountLimit: outputConfig.MaxFiles)
             .CreateLogger();
 
-        _rawWriter = new StreamWriter(rawFilePath, append: true) { AutoFlush = true };
+        _rawWriter = new StreamWriter(RawFilePath, append: true) { AutoFlush = true };
     }
 
     public void EmitRandom()

@@ -48,7 +48,7 @@ public sealed class MainWindow : Toplevel
             X = 0,
             Y = 0,
             Width = Dim.Fill(),
-            Height = Dim.Fill(9),
+            Height = Dim.Fill(10),
             ReadOnly = true,
             CanFocus = false
         };
@@ -73,15 +73,20 @@ public sealed class MainWindow : Toplevel
             CanFocus = false
         };
 
-        var sep = new Label { Text = new string('=', 120), X = 0, Y = 0, Width = Dim.Fill() };
-        var row1 = new Label { Text = "  [1] Toggle baseline     [5] Rates (inf/wrn/err)", X = 0, Y = 1, Width = Dim.Fill() };
-        var row2 = new Label { Text = "  [2] Spike burst         [6] Volume/load test", X = 0, Y = 2, Width = Dim.Fill() };
-        var row3 = new Label { Text = "  [3] Gradual degradation [7] Stop all", X = 0, Y = 3, Width = Dim.Fill() };
-        var row4 = new Label { Text = "  [4] Correlated failures [Q] Quit", X = 0, Y = 4, Width = Dim.Fill() };
-        var sep2 = new Label { Text = new string('=', 120), X = 0, Y = 5, Width = Dim.Fill() };
-        var prompt = new Label { Text = "  Press a key (1-7, Q):", X = 0, Y = 6, Width = Dim.Fill() };
+        var logPathLabel = new Label
+        {
+            Text = $"  Log: {_generator.LogFilePath}",
+            X = 0, Y = 0, Width = Dim.Fill()
+        };
+        var sep = new Label { Text = new string('=', 120), X = 0, Y = 1, Width = Dim.Fill() };
+        var row1 = new Label { Text = "  [1] Toggle baseline     [5] Rates (inf/wrn/err)", X = 0, Y = 2, Width = Dim.Fill() };
+        var row2 = new Label { Text = "  [2] Spike burst         [6] Volume/load test", X = 0, Y = 3, Width = Dim.Fill() };
+        var row3 = new Label { Text = "  [3] Gradual degradation [7] Stop all", X = 0, Y = 4, Width = Dim.Fill() };
+        var row4 = new Label { Text = "  [4] Correlated failures [C] Copy log path", X = 0, Y = 5, Width = Dim.Fill() };
+        var row5 = new Label { Text = "  [Q] Quit", X = 0, Y = 6, Width = Dim.Fill() };
+        var sep2 = new Label { Text = new string('=', 120), X = 0, Y = 7, Width = Dim.Fill() };
 
-        menuView.Add(sep, row1, row2, row3, row4, sep2, prompt);
+        menuView.Add(logPathLabel, sep, row1, row2, row3, row4, row5, sep2);
 
         Add(_logView, _statusLabel, menuView);
 
@@ -122,6 +127,12 @@ public sealed class MainWindow : Toplevel
                 return true;
             case KeyCode.D7:
                 StopAllScenarios();
+                return true;
+            case KeyCode.C:
+            case KeyCode.C | KeyCode.ShiftMask:
+                Clipboard.TrySetClipboardData(_generator.LogFilePath);
+                _pendingLines.Add($"{DateTime.Now:HH:mm:ss} INF  [ui] Log path copied to clipboard");
+                _logDirty = true;
                 return true;
             case KeyCode.Q:
             case KeyCode.Q | KeyCode.ShiftMask:
