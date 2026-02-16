@@ -7,6 +7,7 @@ import type {
   ConnectionTestResponse,
   SchemaResponse,
   SampleRecordsResponse,
+  DetectResponse,
 } from '../types';
 
 export function useDataSources() {
@@ -76,5 +77,12 @@ export function useSampleRecords(id: string, count = 3) {
     queryKey: ['datasources', id, 'sample-records', count],
     queryFn: () => api.get<SampleRecordsResponse>(`/datasources/${id}/sample-records?count=${count}`),
     enabled: !!id,
+  });
+}
+
+export function useDetectLogFile() {
+  return useMutation({
+    mutationFn: (filePath: string) =>
+      api.post<DetectResponse>('/datasources/detect', { filePath }),
   });
 }

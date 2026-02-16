@@ -231,3 +231,25 @@ export interface UpdateConfigurationRequest {
   key: string;
   value: string;
 }
+
+export interface DetectedFieldDto {
+  name: string;
+  type: string;
+  proposedRole: string | null;
+}
+
+export interface DetectedConfigDto {
+  filePath: string;
+  parseMode: string;
+  timestampField: string | null;
+  levelField: string | null;
+  messageField: string | null;
+  regexPattern: string | null;
+}
+
+export interface DetectResponse {
+  detectedFormat: string;
+  fields: DetectedFieldDto[];
+  sampleRecords: Record<string, unknown>[];
+  proposedConfig: DetectedConfigDto;
+}
