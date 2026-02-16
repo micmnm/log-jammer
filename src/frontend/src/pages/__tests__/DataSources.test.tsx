@@ -62,6 +62,10 @@ vi.mock('../../api/hooks/useDataSources', () => ({
     data: null,
     isLoading: false,
   }),
+  useDetectLogFile: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 vi.mock('../../api/hooks/useFingerprintConfigs', () => ({

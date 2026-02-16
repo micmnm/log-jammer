@@ -14,9 +14,18 @@ import {
   FormControlLabel,
   Alert,
   Box,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
+  CircularProgress,
 } from '@mui/material';
-import type { DataSourceResponse, AdapterType } from '../api/types';
-import { useCreateDataSource, useUpdateDataSource, useTestConnection } from '../api/hooks/useDataSources';
+import type { DataSourceResponse, AdapterType, DetectResponse } from '../api/types';
+import { useCreateDataSource, useUpdateDataSource, useTestConnection, useDetectLogFile } from '../api/hooks/useDataSources';
 
 interface ElasticsearchConfig {
   url: string;
@@ -34,6 +43,9 @@ interface PostgreSqlConfig {
 interface LogFileConfig {
   filePath: string;
   parseMode: string;
+  timestampField: string;
+  levelField: string;
+  messageField: string;
   regexPattern: string;
 }
 
@@ -56,6 +68,7 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
   const createDataSource = useCreateDataSource();
   const updateDataSource = useUpdateDataSource();
   const testConnection = useTestConnection();
+  const detectLogFile = useDetectLogFile();
 
   const isEdit = !!dataSource;
 
@@ -79,9 +92,15 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
   // LogFile fields
   const [lfFilePath, setLfFilePath] = useState('');
   const [lfParseMode, setLfParseMode] = useState('');
+  const [lfTimestampField, setLfTimestampField] = useState('');
+  const [lfLevelField, setLfLevelField] = useState('');
+  const [lfMessageField, setLfMessageField] = useState('');
   const [lfRegexPattern, setLfRegexPattern] = useState('');
+  const [lfDetected, setLfDetected] = useState(false);
+  const [lfDetectResult, setLfDetectResult] = useState<DetectResponse | null>(null);
 
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [detectError, setDetectError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -105,7 +124,11 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
         } else if (dataSource.adapterType === 'LogFile') {
           setLfFilePath(config.filePath ?? '');
           setLfParseMode(config.parseMode ?? '');
+          setLfTimestampField(config.timestampField ?? '');
+          setLfLevelField(config.levelField ?? '');
+          setLfMessageField(config.messageField ?? '');
           setLfRegexPattern(config.regexPattern ?? '');
+          setLfDetected(true); // existing data source already has config
         }
       } else {
         setName('');
@@ -122,9 +145,15 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
         setPgTimestampColumn('');
         setLfFilePath('');
         setLfParseMode('');
+        setLfTimestampField('');
+        setLfLevelField('');
+        setLfMessageField('');
         setLfRegexPattern('');
+        setLfDetected(false);
+        setLfDetectResult(null);
       }
       setTestResult(null);
+      setDetectError(null);
     }
   }, [open, dataSource]);
 
@@ -134,9 +163,24 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
     } else if (adapterType === 'PostgreSql') {
       return JSON.stringify({ connectionString: pgConnectionString, table: pgTable, timestampColumn: pgTimestampColumn } satisfies PostgreSqlConfig);
     } else {
-      return JSON.stringify({ filePath: lfFilePath, parseMode: lfParseMode, regexPattern: lfRegexPattern } satisfies LogFileConfig);
+      return JSON.stringify({
+        filePath: lfFilePath,
+        parseMode: lfParseMode,
+        timestampField: lfTimestampField,
+        levelField: lfLevelField,
+        messageField: lfMessageField,
+        regexPattern: lfRegexPattern,
+      } satisfies LogFileConfig);
     }
   };
+
+  const isLogFileMandatoryFilled =
+    lfFilePath && lfDetected && lfTimestampField && lfLevelField && lfMessageField && lfParseMode &&
+    (lfParseMode !== 'regex' || lfRegexPattern);
+
+  const canSave = adapterType === 'LogFile'
+    ? !!(name && isLogFileMandatoryFilled)
+    : !!name;
 
   const handleSave = () => {
     const connectionConfig = buildConnectionConfig();
@@ -167,6 +211,26 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
       },
       onError: (err) => {
         setTestResult({ success: false, message: String(err) });
+      },
+    });
+  };
+
+  const handleDetect = () => {
+    if (!lfFilePath) return;
+    setDetectError(null);
+    setLfDetectResult(null);
+    detectLogFile.mutate(lfFilePath, {
+      onSuccess: (result: DetectResponse) => {
+        setLfDetected(true);
+        setLfParseMode(result.proposedConfig.parseMode);
+        setLfTimestampField(result.proposedConfig.timestampField ?? '');
+        setLfLevelField(result.proposedConfig.levelField ?? '');
+        setLfMessageField(result.proposedConfig.messageField ?? '');
+        setLfRegexPattern(result.proposedConfig.regexPattern ?? '');
+        setLfDetectResult(result);
+      },
+      onError: (err) => {
+        setDetectError(String(err));
       },
     });
   };
@@ -221,9 +285,131 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
 
         {adapterType === 'LogFile' && (
           <Box sx={{ mt: 2 }}>
-            <TextField label="File Path" value={lfFilePath} onChange={(e) => setLfFilePath(e.target.value)} fullWidth margin="dense" />
-            <TextField label="Parse Mode" value={lfParseMode} onChange={(e) => setLfParseMode(e.target.value)} fullWidth margin="dense" />
-            <TextField label="Regex Pattern" value={lfRegexPattern} onChange={(e) => setLfRegexPattern(e.target.value)} fullWidth margin="dense" />
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+              <TextField
+                label="File Path"
+                value={lfFilePath}
+                onChange={(e) => { setLfFilePath(e.target.value); setLfDetected(false); }}
+                fullWidth
+                margin="dense"
+                required
+              />
+              <Button
+                variant="outlined"
+                onClick={handleDetect}
+                disabled={!lfFilePath || detectLogFile.isPending}
+                sx={{ mt: 1, minWidth: 90 }}
+              >
+                {detectLogFile.isPending ? <CircularProgress size={20} /> : 'Detect'}
+              </Button>
+            </Box>
+
+            {detectError && (
+              <Alert severity="error" sx={{ mt: 1 }}>{detectError}</Alert>
+            )}
+
+            {lfDetected && (
+              <>
+                <FormControl fullWidth margin="dense">
+                  <InputLabel>Parse Mode</InputLabel>
+                  <Select
+                    value={lfParseMode}
+                    label="Parse Mode"
+                    onChange={(e) => setLfParseMode(e.target.value)}
+                  >
+                    <MenuItem value="jsonlines">JSON Lines</MenuItem>
+                    <MenuItem value="regex">Regex</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <TextField
+                  label="Timestamp Field"
+                  value={lfTimestampField}
+                  onChange={(e) => setLfTimestampField(e.target.value)}
+                  fullWidth
+                  margin="dense"
+                  required
+                />
+                <TextField
+                  label="Level Field"
+                  value={lfLevelField}
+                  onChange={(e) => setLfLevelField(e.target.value)}
+                  fullWidth
+                  margin="dense"
+                  required
+                />
+                <TextField
+                  label="Message Field"
+                  value={lfMessageField}
+                  onChange={(e) => setLfMessageField(e.target.value)}
+                  fullWidth
+                  margin="dense"
+                  required
+                />
+
+                {lfParseMode === 'regex' && (
+                  <TextField
+                    label="Regex Pattern"
+                    value={lfRegexPattern}
+                    onChange={(e) => setLfRegexPattern(e.target.value)}
+                    fullWidth
+                    margin="dense"
+                    required
+                  />
+                )}
+              </>
+            )}
+
+            {lfDetectResult && lfDetectResult.fields.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Detected Fields ({lfDetectResult.detectedFormat})
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                  {lfDetectResult.fields.map((f) => (
+                    <Chip
+                      key={f.name}
+                      label={f.name}
+                      size="small"
+                      color={f.proposedRole ? 'primary' : 'default'}
+                      variant={f.proposedRole ? 'filled' : 'outlined'}
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {lfDetectResult && lfDetectResult.sampleRecords.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Sample Records
+                </Typography>
+                <TableContainer sx={{ maxHeight: 200 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        {lfDetectResult.fields.map((f) => (
+                          <TableCell key={f.name} sx={{ fontFamily: (theme) => theme.fontFamilyMono, fontSize: '0.75rem' }}>
+                            {f.name}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {lfDetectResult.sampleRecords.map((record, i) => (
+                        <TableRow key={i}>
+                          {lfDetectResult!.fields.map((f) => (
+                            <TableCell key={f.name} sx={{ fontFamily: (theme) => theme.fontFamilyMono, fontSize: '0.7rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {String(record[f.name] ?? '')}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
           </Box>
         )}
 
@@ -259,7 +445,7 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
           </Button>
         )}
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained" disabled={!name}>
+        <Button onClick={handleSave} variant="contained" disabled={!canSave}>
           {isEdit ? 'Save' : 'Create'}
         </Button>
       </DialogActions>

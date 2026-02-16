@@ -5,6 +5,7 @@ import DataSourceDialog from '../DataSourceDialog';
 const mockCreateMutate = vi.fn();
 const mockUpdateMutate = vi.fn();
 const mockTestMutate = vi.fn();
+const mockDetectMutate = vi.fn();
 
 vi.mock('../../api/hooks/useDataSources', () => ({
   useCreateDataSource: () => ({
@@ -19,6 +20,10 @@ vi.mock('../../api/hooks/useDataSources', () => ({
     mutate: mockTestMutate,
     isPending: false,
   }),
+  useDetectLogFile: () => ({
+    mutate: mockDetectMutate,
+    isPending: false,
+  }),
 }));
 
 describe('DataSourceDialog', () => {
@@ -26,6 +31,7 @@ describe('DataSourceDialog', () => {
     mockCreateMutate.mockClear();
     mockUpdateMutate.mockClear();
     mockTestMutate.mockClear();
+    mockDetectMutate.mockClear();
   });
 
   it('renders create dialog', () => {
@@ -101,5 +107,65 @@ describe('DataSourceDialog', () => {
       <DataSourceDialog open={false} onClose={vi.fn()} dataSource={null} />,
     );
     expect(screen.queryByText('Add Data Source')).not.toBeInTheDocument();
+  });
+
+  it('shows LogFile fields with Detect button', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <DataSourceDialog open={true} onClose={vi.fn()} dataSource={null} />,
+    );
+    const adapterSelect = screen.getAllByText('Elasticsearch')[0];
+    await user.click(adapterSelect);
+    await user.click(screen.getByText('Log File'));
+    expect(screen.getByLabelText(/File Path/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Detect' })).toBeInTheDocument();
+  });
+
+  it('disables Create when LogFile mandatory fields are empty', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <DataSourceDialog open={true} onClose={vi.fn()} dataSource={null} />,
+    );
+    const adapterSelect = screen.getAllByText('Elasticsearch')[0];
+    await user.click(adapterSelect);
+    await user.click(screen.getByText('Log File'));
+    // Name is filled but detect hasn't run
+    await user.type(screen.getByLabelText(/Name/), 'Test');
+    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
+  });
+
+  it('enables Create after detect fills mandatory fields', async () => {
+    const user = userEvent.setup();
+    mockDetectMutate.mockImplementation((_path: string, opts: { onSuccess: (data: unknown) => void }) => {
+      opts.onSuccess({
+        detectedFormat: 'jsonlines',
+        fields: [
+          { name: 'timestamp', type: 'String', proposedRole: 'Timestamp' },
+          { name: 'level', type: 'String', proposedRole: 'Level' },
+          { name: 'message', type: 'String', proposedRole: 'Message' },
+        ],
+        sampleRecords: [{ timestamp: '2026-01-01', level: 'ERROR', message: 'test' }],
+        proposedConfig: {
+          filePath: '/app/logs/test.json',
+          parseMode: 'jsonlines',
+          timestampField: 'timestamp',
+          levelField: 'level',
+          messageField: 'message',
+          regexPattern: null,
+        },
+      });
+    });
+
+    renderWithProviders(
+      <DataSourceDialog open={true} onClose={vi.fn()} dataSource={null} />,
+    );
+    const adapterSelect = screen.getAllByText('Elasticsearch')[0];
+    await user.click(adapterSelect);
+    await user.click(screen.getByText('Log File'));
+    await user.type(screen.getByLabelText(/Name/), 'Test');
+    await user.type(screen.getByLabelText(/File Path/), '/app/logs/test.json');
+    await user.click(screen.getByRole('button', { name: 'Detect' }));
+
+    expect(screen.getByRole('button', { name: 'Create' })).not.toBeDisabled();
   });
 });
