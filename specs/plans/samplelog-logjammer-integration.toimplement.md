@@ -10,7 +10,300 @@
 
 ---
 
-### Task 1: Change LogFileConnectionConfig from FilePaths (array) to FilePath (singular)
+## Phase A: SampleLog Changes
+
+### Task 1: Switch SampleLog to ELK-style JSON + Simple Text Output
+
+**Files:**
+- Modify: `src/SampleLog/Generation/LogGenerator.cs`
+- Modify: `src/SampleLog/Models/AppConfig.cs`
+- Modify: `src/SampleLog/appsettings.json`
+- Modify: `src/SampleLog/UI/MainWindow.cs` (update path references)
+- Modify: `run-samplelog.sh`
+
+**Step 1: Update OutputConfig to support output directory change**
+
+In `src/SampleLog/appsettings.json`, change output dir to `../../logs`:
+
+```json
+{
+  "Output": {
+    "Directory": "../../logs",
+    "FilePrefix": "sample",
+    "RollingSizeMB": 10,
+    "MaxFiles": 5
+  },
+  "Defaults": { ... },
+  "LogJammerApi": {
+    "BaseUrl": "http://localhost:5050"
+  }
+}
+```
+
+Add `LogJammerApi` config to `AppConfig.cs`:
+
+In `src/SampleLog/Models/AppConfig.cs`, add:
+
+```csharp
+public sealed class LogJammerApiConfig
+{
+    public string BaseUrl { get; set; } = "http://localhost:5050";
+}
+```
+
+**Step 2: Rewrite LogGenerator to produce ELK JSON + simple text**
+
+In `src/SampleLog/Generation/LogGenerator.cs`:
+
+- Remove Serilog dependency for file writing (keep for template rendering only or remove entirely)
+- Write ELK-style JSON to `{prefix}.json` using `StreamWriter` + `JsonSerializer`
+- Write simple text to `{prefix}.log` using `StreamWriter`
+- Output format for JSON:
+  ```json
+  {"timestamp":"2026-02-16T12:34:56.123Z","level":"ERROR","message":"Failed to connect","service":"MyApp.DataService","traceId":"abc","duration":1200}
+  ```
+- Output format for text:
+  ```
+  2026-02-16 12:34:56.123 ERROR Failed to connect
+  ```
+- Expose `JsonFilePath` and `TextFilePath` properties (rename from `LogFilePath`/`RawFilePath`)
+- `EmitTemplateInternal`: resolve properties, render message, write both formats
+- `EmitPrebaked`: resolve timestamp, write both formats
+
+**Step 3: Update MainWindow references**
+
+In `src/SampleLog/UI/MainWindow.cs`:
+- Update `LogFilePath` references to `JsonFilePath`
+- Update the log path display label
+- Update clipboard copy to copy JSON path
+
+**Step 4: Update run-samplelog.sh**
+
+In `run-samplelog.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
+
+if [ -d "$LOG_DIR" ] && [ -n "$(ls -A "$LOG_DIR" 2>/dev/null)" ]; then
+    ARCHIVE="$SCRIPT_DIR/src/SampleLog/logs-$(date +%Y%m%d-%H%M%S).zip"
+    echo "Archiving existing logs to $ARCHIVE ..."
+    zip -jq "$ARCHIVE" "$LOG_DIR"/*
+    rm "$LOG_DIR"/*
+    echo "Done. Starting SampleLog."
+fi
+
+cd "$SCRIPT_DIR/src/SampleLog"
+dotnet run
+```
+
+**Step 5: Build and verify SampleLog compiles**
+
+Run: `dotnet build src/SampleLog/SampleLog.csproj`
+Expected: Build succeeded
+
+**Step 6: Commit**
+
+```bash
+git add src/SampleLog/Generation/LogGenerator.cs \
+       src/SampleLog/Models/AppConfig.cs \
+       src/SampleLog/appsettings.json \
+       src/SampleLog/UI/MainWindow.cs \
+       run-samplelog.sh
+git commit -m "feat: switch SampleLog to ELK-style JSON + simple text output"
+```
+
+---
+
+### Task 2: Add [R] Register Shortcut to SampleLog TUI
+
+**Files:**
+- Modify: `src/SampleLog/UI/MainWindow.cs`
+- Modify: `src/SampleLog/Program.cs`
+
+**Step 1: Add HTTP client and config to MainWindow**
+
+Update `MainWindow` constructor to accept `LogJammerApiConfig`:
+
+```csharp
+public sealed class MainWindow : Toplevel
+{
+    private readonly LogGenerator _generator;
+    private readonly ScenarioRunner _runner;
+    private readonly DefaultsConfig _defaults;
+    private readonly LogJammerApiConfig _apiConfig;
+    // ... existing fields
+```
+
+**Step 2: Add [R] key handler**
+
+In `OnKeyDown`, add:
+
+```csharp
+case KeyCode.R:
+case KeyCode.R | KeyCode.ShiftMask:
+    ShowRegisterDialog();
+    return true;
+```
+
+**Step 3: Implement ShowRegisterDialog**
+
+```csharp
+private void ShowRegisterDialog()
+{
+    var dialog = new Dialog
+    {
+        Title = "Register with LogJammer",
+        Width = 50,
+        Height = 10
+    };
+
+    var label = new Label { Text = "Register which log file?", X = 1, Y = 1 };
+    var jsonBtn = new Button { Text = "[1] JSON", X = 1, Y = 3 };
+    var textBtn = new Button { Text = "[2] Text", X = 14, Y = 3 };
+    var bothBtn = new Button { Text = "[3] Both", X = 27, Y = 3 };
+    var cancelBtn = new Button { Text = "Cancel" };
+
+    jsonBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); RegisterAsync("json"); };
+    textBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); RegisterAsync("text"); };
+    bothBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); RegisterAsync("both"); };
+    cancelBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); };
+
+    dialog.Add(label, jsonBtn, textBtn, bothBtn);
+    dialog.AddButton(cancelBtn);
+    Application.Run(dialog);
+    dialog.Dispose();
+}
+```
+
+**Step 4: Implement RegisterAsync**
+
+```csharp
+private async void RegisterAsync(string mode)
+{
+    var filesToRegister = new List<(string path, string name)>();
+
+    if (mode is "json" or "both")
+        filesToRegister.Add((_generator.JsonFilePath, "SampleLog JSON"));
+    if (mode is "text" or "both")
+        filesToRegister.Add((_generator.TextFilePath, "SampleLog Text"));
+
+    using var http = new HttpClient { BaseAddress = new Uri(_apiConfig.BaseUrl) };
+
+    foreach (var (path, name) in filesToRegister)
+    {
+        try
+        {
+            // Step 1: Detect
+            var detectPayload = JsonSerializer.Serialize(new { filePath = path });
+            var detectResponse = await http.PostAsync("/api/datasources/detect",
+                new StringContent(detectPayload, System.Text.Encoding.UTF8, "application/json"));
+
+            if (!detectResponse.IsSuccessStatusCode)
+            {
+                var err = await detectResponse.Content.ReadAsStringAsync();
+                AddStatusLine($"ERR  [register] Detect failed for {name}: {err}");
+                continue;
+            }
+
+            var detectResult = await JsonSerializer.DeserializeAsync<JsonElement>(
+                await detectResponse.Content.ReadAsStreamAsync());
+
+            var proposedConfig = detectResult.GetProperty("proposedConfig");
+
+            // Step 2: Create data source
+            var connectionConfig = JsonSerializer.Serialize(new
+            {
+                filePath = path,
+                parseMode = proposedConfig.GetProperty("parseMode").GetString(),
+                timestampField = proposedConfig.GetProperty("timestampField").GetString(),
+                levelField = proposedConfig.GetProperty("levelField").GetString(),
+                messageField = proposedConfig.GetProperty("messageField").GetString(),
+                regexPattern = proposedConfig.TryGetProperty("regexPattern", out var rp) ? rp.GetString() : null
+            });
+
+            var createPayload = JsonSerializer.Serialize(new
+            {
+                name,
+                adapterType = "LogFile",
+                connectionConfig,
+                pollIntervalSeconds = 30,
+                enabled = true
+            });
+
+            var createResponse = await http.PostAsync("/api/datasources",
+                new StringContent(createPayload, System.Text.Encoding.UTF8, "application/json"));
+
+            if (createResponse.IsSuccessStatusCode)
+                AddStatusLine($"INF  [register] {name} registered successfully");
+            else
+            {
+                var err = await createResponse.Content.ReadAsStringAsync();
+                AddStatusLine($"ERR  [register] Create failed for {name}: {err}");
+            }
+        }
+        catch (Exception ex)
+        {
+            AddStatusLine($"ERR  [register] {ex.Message}");
+        }
+    }
+}
+
+private void AddStatusLine(string message)
+{
+    Application.Invoke(() =>
+    {
+        _pendingLines.Add($"{DateTime.Now:HH:mm:ss} {message}");
+        _logDirty = true;
+    });
+}
+```
+
+**Step 5: Update menu display in MainWindow**
+
+Update the menu labels to include `[R]`:
+```csharp
+var row4 = new Label { Text = "  [4] Correlated failures [C] Copy log path", ... };
+var row5 = new Label { Text = "  [R] Register with LogJammer  [Q] Quit", ... };
+```
+
+**Step 6: Wire config in Program.cs**
+
+In `src/SampleLog/Program.cs`, add:
+
+```csharp
+var apiConfig = new LogJammerApiConfig();
+config.GetSection("LogJammerApi").Bind(apiConfig);
+```
+
+Pass `apiConfig` to `MainWindow`:
+```csharp
+var mainWindow = new MainWindow(generator, runner, defaults, apiConfig);
+```
+
+**Step 7: Build and verify**
+
+Run: `dotnet build src/SampleLog/SampleLog.csproj`
+Expected: Build succeeded
+
+**Step 8: Commit**
+
+```bash
+git add src/SampleLog/UI/MainWindow.cs \
+       src/SampleLog/Program.cs \
+       src/SampleLog/Models/AppConfig.cs \
+       src/SampleLog/appsettings.json
+git commit -m "feat: add [R] Register with LogJammer shortcut to SampleLog TUI"
+```
+
+---
+
+## Phase B: LogJammer Backend
+
+### Task 3: Change LogFileConnectionConfig from FilePaths (array) to FilePath (singular)
 
 **Files:**
 - Modify: `src/LogJammer.Infrastructure/Adapters/LogFile/LogFileConnectionConfig.cs`
@@ -104,7 +397,7 @@ git commit -m "refactor: change LogFileConnectionConfig to single FilePath"
 
 ---
 
-### Task 2: Create LogFileDetectService
+### Task 4: Create LogFileDetectService
 
 **Files:**
 - Create: `src/LogJammer.Infrastructure/Adapters/LogFile/LogFileDetectService.cs`
@@ -514,7 +807,7 @@ git commit -m "feat: add LogFileDetectService for auto-detecting log format and 
 
 ---
 
-### Task 3: Add Detect Endpoint to API
+### Task 5: Add Detect Endpoint to API
 
 **Files:**
 - Modify: `src/LogJammer.Api/Controllers/DataSourcesController.cs`
@@ -679,7 +972,15 @@ git commit -m "feat: add POST /api/datasources/detect endpoint for log format au
 
 ---
 
-### Task 4: Update Frontend — Types and Hook for Detect
+## ⏸️ CHECKPOINT: Ask user before proceeding to frontend
+
+> Phase A (SampleLog) and Phase B (Backend) are complete. Ask user to confirm before starting Phase C (Frontend).
+
+---
+
+## Phase C: LogJammer Frontend
+
+### Task 6: Update Frontend — Types and Hook for Detect
 
 **Files:**
 - Modify: `src/frontend/src/api/types.ts`
@@ -747,7 +1048,7 @@ git commit -m "feat: add detect types and useDetectLogFile hook"
 
 ---
 
-### Task 5: Update Frontend — DataSourceDialog with Detect + Validation
+### Task 7: Update Frontend — DataSourceDialog with Detect + Validation
 
 **Files:**
 - Modify: `src/frontend/src/components/DataSourceDialog.tsx`
@@ -883,296 +1184,7 @@ git commit -m "feat: add Detect button and validation to LogFile DataSourceDialo
 
 ---
 
-### Task 6: Switch SampleLog to ELK-style JSON + Simple Text Output
-
-**Files:**
-- Modify: `src/SampleLog/Generation/LogGenerator.cs`
-- Modify: `src/SampleLog/Models/AppConfig.cs`
-- Modify: `src/SampleLog/appsettings.json`
-- Modify: `src/SampleLog/UI/MainWindow.cs` (update path references)
-- Modify: `run-samplelog.sh`
-
-**Step 1: Update OutputConfig to support output directory change**
-
-In `src/SampleLog/appsettings.json`, change output dir to `../../logs`:
-
-```json
-{
-  "Output": {
-    "Directory": "../../logs",
-    "FilePrefix": "sample",
-    "RollingSizeMB": 10,
-    "MaxFiles": 5
-  },
-  "Defaults": { ... },
-  "LogJammerApi": {
-    "BaseUrl": "http://localhost:5050"
-  }
-}
-```
-
-Add `LogJammerApi` config to `AppConfig.cs` (create if no AppConfig aggregator exists — otherwise add to `OutputConfig` or create new record):
-
-In `src/SampleLog/Models/AppConfig.cs`, add:
-
-```csharp
-public sealed class LogJammerApiConfig
-{
-    public string BaseUrl { get; set; } = "http://localhost:5050";
-}
-```
-
-**Step 2: Rewrite LogGenerator to produce ELK JSON + simple text**
-
-In `src/SampleLog/Generation/LogGenerator.cs`:
-
-- Remove Serilog dependency for file writing (keep for template rendering only or remove entirely)
-- Write ELK-style JSON to `{prefix}.json` using `StreamWriter` + `JsonSerializer`
-- Write simple text to `{prefix}.log` using `StreamWriter`
-- Output format for JSON:
-  ```json
-  {"timestamp":"2026-02-16T12:34:56.123Z","level":"ERROR","message":"Failed to connect","service":"MyApp.DataService","traceId":"abc","duration":1200}
-  ```
-- Output format for text:
-  ```
-  2026-02-16 12:34:56.123 ERROR Failed to connect
-  ```
-- Expose `JsonFilePath` and `TextFilePath` properties (rename from `LogFilePath`/`RawFilePath`)
-- `EmitTemplateInternal`: resolve properties, render message, write both formats
-- `EmitPrebaked`: resolve timestamp, write both formats
-
-**Step 3: Update MainWindow references**
-
-In `src/SampleLog/UI/MainWindow.cs`:
-- Update `LogFilePath` references to `JsonFilePath`
-- Update the log path display label
-- Update clipboard copy to copy JSON path
-
-**Step 4: Update run-samplelog.sh**
-
-In `run-samplelog.sh`:
-- Change `LOG_DIR` to `./logs` (repo root — the script `cd`s to `src/SampleLog`, but output is now `../../logs` which resolves to repo root)
-- Actually, the script does `cd "$(dirname "$0")/src/SampleLog"` then references `./logs`. Since output dir is now `../../logs`, the archive logic should reference `../../logs`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG_DIR="$SCRIPT_DIR/logs"
-
-if [ -d "$LOG_DIR" ] && [ -n "$(ls -A "$LOG_DIR" 2>/dev/null)" ]; then
-    ARCHIVE="$SCRIPT_DIR/src/SampleLog/logs-$(date +%Y%m%d-%H%M%S).zip"
-    echo "Archiving existing logs to $ARCHIVE ..."
-    zip -jq "$ARCHIVE" "$LOG_DIR"/*
-    rm "$LOG_DIR"/*
-    echo "Done. Starting SampleLog."
-fi
-
-cd "$SCRIPT_DIR/src/SampleLog"
-dotnet run
-```
-
-**Step 5: Build and verify SampleLog compiles**
-
-Run: `dotnet build src/SampleLog/SampleLog.csproj`
-Expected: Build succeeded
-
-**Step 6: Commit**
-
-```bash
-git add src/SampleLog/Generation/LogGenerator.cs \
-       src/SampleLog/Models/AppConfig.cs \
-       src/SampleLog/appsettings.json \
-       src/SampleLog/UI/MainWindow.cs \
-       run-samplelog.sh
-git commit -m "feat: switch SampleLog to ELK-style JSON + simple text output"
-```
-
----
-
-### Task 7: Add [R] Register Shortcut to SampleLog TUI
-
-**Files:**
-- Modify: `src/SampleLog/UI/MainWindow.cs`
-- Modify: `src/SampleLog/Program.cs`
-
-**Step 1: Add HTTP client and config to MainWindow**
-
-Update `MainWindow` constructor to accept `LogJammerApiConfig`:
-
-```csharp
-public sealed class MainWindow : Toplevel
-{
-    private readonly LogGenerator _generator;
-    private readonly ScenarioRunner _runner;
-    private readonly DefaultsConfig _defaults;
-    private readonly LogJammerApiConfig _apiConfig;
-    // ... existing fields
-```
-
-**Step 2: Add [R] key handler**
-
-In `OnKeyDown`, add:
-
-```csharp
-case KeyCode.R:
-case KeyCode.R | KeyCode.ShiftMask:
-    ShowRegisterDialog();
-    return true;
-```
-
-**Step 3: Implement ShowRegisterDialog**
-
-```csharp
-private void ShowRegisterDialog()
-{
-    var dialog = new Dialog
-    {
-        Title = "Register with LogJammer",
-        Width = 50,
-        Height = 10
-    };
-
-    var label = new Label { Text = "Register which log file?", X = 1, Y = 1 };
-    var jsonBtn = new Button { Text = "[1] JSON", X = 1, Y = 3 };
-    var textBtn = new Button { Text = "[2] Text", X = 14, Y = 3 };
-    var bothBtn = new Button { Text = "[3] Both", X = 27, Y = 3 };
-    var cancelBtn = new Button { Text = "Cancel" };
-
-    jsonBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); RegisterAsync("json"); };
-    textBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); RegisterAsync("text"); };
-    bothBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); RegisterAsync("both"); };
-    cancelBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); };
-
-    dialog.Add(label, jsonBtn, textBtn, bothBtn);
-    dialog.AddButton(cancelBtn);
-    Application.Run(dialog);
-    dialog.Dispose();
-}
-```
-
-**Step 4: Implement RegisterAsync**
-
-```csharp
-private async void RegisterAsync(string mode)
-{
-    var filesToRegister = new List<(string path, string name)>();
-
-    if (mode is "json" or "both")
-        filesToRegister.Add((_generator.JsonFilePath, "SampleLog JSON"));
-    if (mode is "text" or "both")
-        filesToRegister.Add((_generator.TextFilePath, "SampleLog Text"));
-
-    using var http = new HttpClient { BaseAddress = new Uri(_apiConfig.BaseUrl) };
-
-    foreach (var (path, name) in filesToRegister)
-    {
-        try
-        {
-            // Step 1: Detect
-            var detectPayload = JsonSerializer.Serialize(new { filePath = path });
-            var detectResponse = await http.PostAsync("/api/datasources/detect",
-                new StringContent(detectPayload, System.Text.Encoding.UTF8, "application/json"));
-
-            if (!detectResponse.IsSuccessStatusCode)
-            {
-                var err = await detectResponse.Content.ReadAsStringAsync();
-                AddStatusLine($"ERR  [register] Detect failed for {name}: {err}");
-                continue;
-            }
-
-            var detectResult = await JsonSerializer.DeserializeAsync<JsonElement>(
-                await detectResponse.Content.ReadAsStreamAsync());
-
-            var proposedConfig = detectResult.GetProperty("proposedConfig");
-
-            // Step 2: Create data source
-            var connectionConfig = JsonSerializer.Serialize(new
-            {
-                filePath = path,
-                parseMode = proposedConfig.GetProperty("parseMode").GetString(),
-                timestampField = proposedConfig.GetProperty("timestampField").GetString(),
-                levelField = proposedConfig.GetProperty("levelField").GetString(),
-                messageField = proposedConfig.GetProperty("messageField").GetString(),
-                regexPattern = proposedConfig.TryGetProperty("regexPattern", out var rp) ? rp.GetString() : null
-            });
-
-            var createPayload = JsonSerializer.Serialize(new
-            {
-                name,
-                adapterType = "LogFile",
-                connectionConfig,
-                pollIntervalSeconds = 30,
-                enabled = true
-            });
-
-            var createResponse = await http.PostAsync("/api/datasources",
-                new StringContent(createPayload, System.Text.Encoding.UTF8, "application/json"));
-
-            if (createResponse.IsSuccessStatusCode)
-                AddStatusLine($"INF  [register] {name} registered successfully");
-            else
-            {
-                var err = await createResponse.Content.ReadAsStringAsync();
-                AddStatusLine($"ERR  [register] Create failed for {name}: {err}");
-            }
-        }
-        catch (Exception ex)
-        {
-            AddStatusLine($"ERR  [register] {ex.Message}");
-        }
-    }
-}
-
-private void AddStatusLine(string message)
-{
-    Application.Invoke(() =>
-    {
-        _pendingLines.Add($"{DateTime.Now:HH:mm:ss} {message}");
-        _logDirty = true;
-    });
-}
-```
-
-**Step 5: Update menu display in MainWindow**
-
-Update the menu labels to include `[R]`:
-```csharp
-var row4 = new Label { Text = "  [4] Correlated failures [C] Copy log path", ... };
-var row5 = new Label { Text = "  [R] Register with LogJammer  [Q] Quit", ... };
-```
-
-**Step 6: Wire config in Program.cs**
-
-In `src/SampleLog/Program.cs`, add:
-
-```csharp
-var apiConfig = new LogJammerApiConfig();
-config.GetSection("LogJammerApi").Bind(apiConfig);
-```
-
-Pass `apiConfig` to `MainWindow`:
-```csharp
-var mainWindow = new MainWindow(generator, runner, defaults, apiConfig);
-```
-
-**Step 7: Build and verify**
-
-Run: `dotnet build src/SampleLog/SampleLog.csproj`
-Expected: Build succeeded
-
-**Step 8: Commit**
-
-```bash
-git add src/SampleLog/UI/MainWindow.cs \
-       src/SampleLog/Program.cs \
-       src/SampleLog/Models/AppConfig.cs \
-       src/SampleLog/appsettings.json
-git commit -m "feat: add [R] Register with LogJammer shortcut to SampleLog TUI"
-```
-
----
+## Phase D: Wrap-up
 
 ### Task 8: Update Spec Files
 
