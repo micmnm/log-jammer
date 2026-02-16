@@ -437,3 +437,4 @@ data/
 
 # SampleLog generated output
 src/SampleLog/logs/
+src/SampleLog/*.zip
