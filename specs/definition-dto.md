@@ -86,6 +86,20 @@
 | CreatedAt | DateTime | created_at | auto-set |
 | UpdatedAt | DateTime | updated_at | auto-set |
 
+Navigation properties: `DataSource`, `ErrorTags`, `Occurrences`, `UserOverrides`, `Alerts`, `FingerprintAliases`
+
+### FingerprintAlias
+`LogJammer.Core.Entities.FingerprintAlias` → `fingerprint_aliases`
+
+| Property | Type | DB Column | Notes |
+|----------|------|-----------|-------|
+| Id | Guid | id | PK, auto-generated |
+| FingerprintHash | string | fingerprint_hash | max 64, unique index |
+| KnownErrorId | Guid | known_error_id | FK → known_errors (cascade delete) |
+| CreatedAt | DateTime | created_at | auto-set |
+
+Maps merged fingerprint hashes to their target KnownError. When ClassificationProcessor detects two KnownErrors are semantically identical (via embedding similarity), it merges them and creates an alias so future ingestion routes the variant hash directly to the surviving group.
+
 ### ErrorOccurrence
 `LogJammer.Core.Entities.ErrorOccurrence` → `error_occurrences`
 
@@ -250,6 +264,8 @@
 - `GetByIdAsync(id)` → `Task<KnownError?>`
 - `AddAsync(knownError)` → `Task<KnownError>`
 - `UpdateAsync(knownError)` → `Task`
+- `GetByFingerprintAliasAsync(fingerprintHash)` → `Task<KnownError?>` — looks up via `fingerprint_aliases` table
+- `MergeIntoAsync(sourceKnownErrorId, targetKnownErrorId)` → `Task` — moves occurrences, creates alias, deletes source (idempotent)
 
 ### IErrorOccurrenceRepository
 `LogJammer.Core.Interfaces.IErrorOccurrenceRepository`

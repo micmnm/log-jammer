@@ -20,6 +20,7 @@ public class LogJammerDbContext : DbContext
     public DbSet<ClassificationQueueItem> ClassificationQueue => Set<ClassificationQueueItem>();
     public DbSet<ClassificationConfig> ClassificationConfigs => Set<ClassificationConfig>();
     public DbSet<TagCentroid> TagCentroids => Set<TagCentroid>();
+    public DbSet<FingerprintAlias> FingerprintAliases => Set<FingerprintAlias>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -7,6 +7,8 @@ import {
   Alert,
   ToggleButton,
   ToggleButtonGroup,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useClassificationQueue } from '../api/hooks/useClassification';
@@ -68,7 +70,7 @@ function StatBox({ label, value, color }: StatBoxProps) {
 export default function Classification() {
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<ConfidenceBand>('all');
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
 
   const { data, isLoading, error } = useClassificationQueue(page, pageSize);
 
@@ -173,14 +175,27 @@ export default function Classification() {
         <ClassificationQueueCard key={item.id} item={item} />
       ))}
 
-      {data && data.totalCount > pageSize && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-          <Pagination
-            count={Math.ceil(data.totalCount / pageSize)}
-            page={page}
-            onChange={(_, value) => setPage(value)}
-            color="primary"
-          />
+      {data && data.totalCount > 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 3 }}>
+          {data.totalCount > pageSize && (
+            <Pagination
+              count={Math.ceil(data.totalCount / pageSize)}
+              page={page}
+              onChange={(_, value) => setPage(value)}
+              color="primary"
+            />
+          )}
+          <Select
+            value={pageSize}
+            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+            size="small"
+            sx={{ minWidth: 80 }}
+          >
+            <MenuItem value={5}>5</MenuItem>
+            <MenuItem value={10}>10</MenuItem>
+            <MenuItem value={25}>25</MenuItem>
+            <MenuItem value={50}>50</MenuItem>
+          </Select>
         </Box>
       )}
     </Box>

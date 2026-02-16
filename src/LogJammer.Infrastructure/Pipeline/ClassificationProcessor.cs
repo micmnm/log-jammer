@@ -72,6 +72,17 @@ public class ClassificationProcessor(
             {
                 var result = await classificationService.ClassifyAsync(item.KnownError, ct);
 
+                // Merge semantically duplicate error groups
+                if (result.MatchedErrorGroupId.HasValue
+                    && result.MatchedErrorGroupId.Value != item.KnownErrorId)
+                {
+                    var knownErrorRepo = scope.ServiceProvider.GetRequiredService<IKnownErrorRepository>();
+                    await knownErrorRepo.MergeIntoAsync(item.KnownErrorId, result.MatchedErrorGroupId.Value, ct);
+                    logger.LogInformation("Merged error {SourceId} into {TargetId} (similarity={Similarity:F3})",
+                        item.KnownErrorId, result.MatchedErrorGroupId.Value, result.SimilarityScore);
+                    continue; // source is deleted, skip tag assignment
+                }
+
                 item.Confidence = result.SimilarityScore;
                 item.SuggestedTags = JsonSerializer.Serialize(
                     result.SuggestedTags.Select(s => new { s.TagId, s.TagName, s.Confidence }));

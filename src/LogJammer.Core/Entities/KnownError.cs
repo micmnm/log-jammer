@@ -25,4 +25,5 @@ public class KnownError
     public ICollection<ErrorOccurrence> Occurrences { get; set; } = [];
     public ICollection<UserOverride> UserOverrides { get; set; } = [];
     public ICollection<Alert> Alerts { get; set; } = [];
+    public ICollection<FingerprintAlias> FingerprintAliases { get; set; } = [];
 }

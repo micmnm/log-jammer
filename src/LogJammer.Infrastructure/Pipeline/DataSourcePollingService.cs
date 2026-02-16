@@ -92,6 +92,7 @@ public class DataSourcePollingService
                 var fingerprint = fingerprintCalculator.ComputeFingerprint(mapped, fingerprintConfigs);
 
                 var knownError = await knownErrorRepo.GetByFingerprintHashAsync(fingerprint, cancellationToken);
+                knownError ??= await knownErrorRepo.GetByFingerprintAliasAsync(fingerprint, cancellationToken);
 
                 if (knownError is null)
                 {

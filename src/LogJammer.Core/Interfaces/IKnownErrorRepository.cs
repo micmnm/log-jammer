@@ -21,4 +21,6 @@ public interface IKnownErrorRepository
     Task<KnownError?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<KnownError> AddAsync(KnownError knownError, CancellationToken cancellationToken = default);
     Task UpdateAsync(KnownError knownError, CancellationToken cancellationToken = default);
+    Task<KnownError?> GetByFingerprintAliasAsync(string fingerprintHash, CancellationToken cancellationToken = default);
+    Task MergeIntoAsync(Guid sourceKnownErrorId, Guid targetKnownErrorId, CancellationToken cancellationToken = default);
 }

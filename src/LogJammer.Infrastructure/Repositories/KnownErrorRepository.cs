@@ -63,6 +63,65 @@ public class KnownErrorRepository(LogJammerDbContext context) : IKnownErrorRepos
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<KnownError?> GetByFingerprintAliasAsync(string fingerprintHash, CancellationToken cancellationToken = default)
+    {
+        var alias = await context.FingerprintAliases
+            .Include(a => a.KnownError)
+            .FirstOrDefaultAsync(a => a.FingerprintHash == fingerprintHash, cancellationToken);
+
+        return alias?.KnownError;
+    }
+
+    public async Task MergeIntoAsync(Guid sourceKnownErrorId, Guid targetKnownErrorId, CancellationToken cancellationToken = default)
+    {
+        var source = await context.KnownErrors
+            .Include(e => e.Occurrences)
+            .FirstOrDefaultAsync(e => e.Id == sourceKnownErrorId, cancellationToken);
+
+        // Idempotent: no-op if source already deleted
+        if (source is null) return;
+
+        var target = await context.KnownErrors
+            .Include(e => e.Occurrences)
+            .FirstAsync(e => e.Id == targetKnownErrorId, cancellationToken);
+
+        // Move occurrences: merge counts for overlapping windows, re-parent others
+        foreach (var sourceOcc in source.Occurrences)
+        {
+            var overlapping = target.Occurrences.FirstOrDefault(t =>
+                t.WindowStart == sourceOcc.WindowStart && t.WindowEnd == sourceOcc.WindowEnd);
+
+            if (overlapping is not null)
+            {
+                overlapping.Count += sourceOcc.Count;
+                context.ErrorOccurrences.Remove(sourceOcc);
+            }
+            else
+            {
+                sourceOcc.KnownErrorId = targetKnownErrorId;
+            }
+        }
+
+        // Update target aggregate fields
+        target.TotalOccurrences += source.TotalOccurrences;
+        if (source.FirstSeen < target.FirstSeen)
+            target.FirstSeen = source.FirstSeen;
+        if (source.LastSeen > target.LastSeen)
+            target.LastSeen = source.LastSeen;
+
+        // Create alias so future lookups route directly to target
+        context.FingerprintAliases.Add(new FingerprintAlias
+        {
+            FingerprintHash = source.FingerprintHash,
+            KnownErrorId = targetKnownErrorId
+        });
+
+        // Delete source (cascades: ErrorTags, Alerts, ClassificationQueueItem, UserOverrides)
+        context.KnownErrors.Remove(source);
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     private IQueryable<KnownError> BuildFilterQuery(Guid? dataSourceId, ErrorStatus? status, ErrorSeverity? severity)
     {
         var query = context.KnownErrors.AsQueryable();

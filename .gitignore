@@ -421,8 +421,8 @@ FodyWeavers.xsd
 *.msp
 
 # Runtime data (config files)
-data/
-!data/.gitkeep
+/data/
+!/data/.gitkeep
 
 # JetBrains Rider
 .idea/

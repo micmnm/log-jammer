@@ -4,6 +4,7 @@ using LogJammer.Core.Entities;
 using LogJammer.Core.Interfaces;
 using LogJammer.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Pgvector.EntityFrameworkCore;
 
 namespace LogJammer.Api.Services;
 
@@ -11,6 +12,8 @@ public class ClassificationQueueService(
     IClassificationQueueRepository queueRepo,
     IUserOverrideRepository overrideRepo,
     IClassificationService classificationService,
+    IKnownErrorRepository knownErrorRepo,
+    IClassificationConfigRepository configRepo,
     LogJammerDbContext context) : IClassificationQueueService
 {
     public async Task<ClassificationQueuePagedResponse> GetPendingAsync(int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
@@ -67,6 +70,8 @@ public class ClassificationQueueService(
             await classificationService.RecalculateTagCentroidAsync(tagId, cancellationToken);
         }
 
+        await MergeSimilarPendingAsync(item.KnownErrorId, cancellationToken);
+
         return true;
     }
 
@@ -120,7 +125,41 @@ public class ClassificationQueueService(
             await classificationService.RecalculateTagCentroidAsync(tagId, cancellationToken);
         }
 
+        await MergeSimilarPendingAsync(item.KnownErrorId, cancellationToken);
+
         return true;
+    }
+
+    private async Task MergeSimilarPendingAsync(Guid knownErrorId, CancellationToken ct)
+    {
+        var knownError = await context.KnownErrors
+            .AsNoTracking()
+            .Where(e => e.Id == knownErrorId)
+            .Select(e => new { e.Id, e.EmbeddingVector })
+            .FirstOrDefaultAsync(ct);
+
+        if (knownError?.EmbeddingVector is null)
+            return;
+
+        var similarityThreshold = 0.85;
+        var configEntry = await configRepo.GetAsync("SimilarityThreshold", ct);
+        if (configEntry is not null && double.TryParse(configEntry.Value, out var threshold))
+            similarityThreshold = threshold;
+
+        var maxDistance = 1.0 - similarityThreshold;
+
+        // Find pending queue items whose KnownErrors have similar embeddings
+        var similarItems = await context.ClassificationQueue
+            .Where(q => !q.Reviewed && q.KnownErrorId != knownErrorId)
+            .Where(q => q.KnownError.EmbeddingVector != null
+                && q.KnownError.EmbeddingVector!.CosineDistance(knownError.EmbeddingVector) < maxDistance)
+            .Select(q => q.KnownErrorId)
+            .ToListAsync(ct);
+
+        foreach (var sourceId in similarItems)
+        {
+            await knownErrorRepo.MergeIntoAsync(sourceId, knownErrorId, ct);
+        }
     }
 
     private static ClassificationQueueResponse MapToResponse(ClassificationQueueItem item)

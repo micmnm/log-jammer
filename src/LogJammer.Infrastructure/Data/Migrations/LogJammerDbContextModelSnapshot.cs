@@ -346,6 +346,38 @@ namespace LogJammer.Infrastructure.Data.Migrations
                     b.ToTable("error_tags", (string)null);
                 });
 
+            modelBuilder.Entity("LogJammer.Core.Entities.FingerprintAlias", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FingerprintHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("fingerprint_hash");
+
+                    b.Property<Guid>("KnownErrorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("known_error_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FingerprintHash")
+                        .IsUnique();
+
+                    b.HasIndex("KnownErrorId");
+
+                    b.ToTable("fingerprint_aliases", (string)null);
+                });
+
             modelBuilder.Entity("LogJammer.Core.Entities.FingerprintConfig", b =>
                 {
                     b.Property<Guid>("Id")
@@ -681,6 +713,17 @@ namespace LogJammer.Infrastructure.Data.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("LogJammer.Core.Entities.FingerprintAlias", b =>
+                {
+                    b.HasOne("LogJammer.Core.Entities.KnownError", "KnownError")
+                        .WithMany("FingerprintAliases")
+                        .HasForeignKey("KnownErrorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("KnownError");
+                });
+
             modelBuilder.Entity("LogJammer.Core.Entities.FingerprintConfig", b =>
                 {
                     b.HasOne("LogJammer.Core.Entities.DataSource", "DataSource")
@@ -746,6 +789,8 @@ namespace LogJammer.Infrastructure.Data.Migrations
                     b.Navigation("Alerts");
 
                     b.Navigation("ErrorTags");
+
+                    b.Navigation("FingerprintAliases");
 
                     b.Navigation("Occurrences");
 
