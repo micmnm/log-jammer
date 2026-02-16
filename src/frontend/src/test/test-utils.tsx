@@ -4,6 +4,7 @@ import { ThemeProvider } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import theme from '../theme';
+import { NotificationProvider } from '../contexts/NotificationContext';
 
 function createTestQueryClient() {
   return new QueryClient({
@@ -25,7 +26,9 @@ function AllProviders({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
-        <MemoryRouter>{children}</MemoryRouter>
+        <NotificationProvider>
+          <MemoryRouter>{children}</MemoryRouter>
+        </NotificationProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

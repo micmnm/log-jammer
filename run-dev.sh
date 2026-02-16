@@ -20,9 +20,9 @@ echo "========================================"
 echo "  Log Jammer - Development"
 echo "========================================"
 echo ""
-echo "  API:      http://localhost:5000"
+echo "  API:      http://localhost:5050"
 echo "  Frontend: http://localhost:5173"
-echo "  Scalar:   http://localhost:5000/scalar"
+echo "  Scalar:   http://localhost:5050/scalar"
 echo ""
 echo "  Press Ctrl+C to stop"
 echo "========================================"
@@ -37,5 +37,5 @@ npm run dev --prefix "$SCRIPT_DIR/src/frontend" &
 FRONTEND_PID=$!
 
 # Wait for either process to exit
-wait -n "$API_PID" "$FRONTEND_PID" 2>/dev/null || true
+wait "$API_PID" "$FRONTEND_PID" 2>/dev/null || true
 cleanup

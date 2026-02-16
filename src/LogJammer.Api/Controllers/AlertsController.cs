@@ -25,7 +25,7 @@ public class AlertsController(IAlertService alertService) : ControllerBase
     public async Task<ActionResult<AlertDto>> GetById(Guid id, CancellationToken cancellationToken = default)
     {
         var alert = await alertService.GetByIdAsync(id, cancellationToken);
-        if (alert is null) return NotFound();
+        if (alert is null) return Problem(detail: "Alert not found.", statusCode: 404);
         return Ok(alert);
     }
 
@@ -33,7 +33,7 @@ public class AlertsController(IAlertService alertService) : ControllerBase
     public async Task<ActionResult<AlertDto>> Acknowledge(Guid id, CancellationToken cancellationToken = default)
     {
         var alert = await alertService.AcknowledgeAsync(id, cancellationToken);
-        if (alert is null) return NotFound();
+        if (alert is null) return Problem(detail: "Alert not found.", statusCode: 404);
         return Ok(alert);
     }
 

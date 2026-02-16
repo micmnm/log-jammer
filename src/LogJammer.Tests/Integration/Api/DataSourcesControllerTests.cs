@@ -100,7 +100,7 @@ public class DataSourcesControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task GetById_WithNonExistentId_Returns404()
+    public async Task GetById_WithNonExistentId_Returns404WithProblemDetails()
     {
         var id = Guid.NewGuid();
         _service.GetByIdAsync(id, Arg.Any<CancellationToken>())
@@ -109,6 +109,22 @@ public class DataSourcesControllerTests : IDisposable
         var response = await _client.GetAsync($"/api/datasources/{id}");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var body = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        body!.RootElement.GetProperty("detail").GetString().Should().Be("Data source not found.");
+    }
+
+    [Fact]
+    public async Task GetById_WhenServiceThrows_Returns500WithProblemDetails()
+    {
+        var id = Guid.NewGuid();
+        _service.GetByIdAsync(id, Arg.Any<CancellationToken>())
+            .Returns<DataSourceResponse?>(_ => throw new InvalidOperationException("Boom"));
+
+        var response = await _client.GetAsync($"/api/datasources/{id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
     }
 
     [Fact]

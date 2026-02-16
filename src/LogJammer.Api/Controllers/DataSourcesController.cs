@@ -19,7 +19,7 @@ public class DataSourcesController(IDataSourceService dataSourceService) : Contr
     public async Task<ActionResult<DataSourceResponse>> GetById(Guid id, CancellationToken cancellationToken)
     {
         var dataSource = await dataSourceService.GetByIdAsync(id, cancellationToken);
-        if (dataSource is null) return NotFound();
+        if (dataSource is null) return Problem(detail: "Data source not found.", statusCode: 404);
         return Ok(dataSource);
     }
 
@@ -28,8 +28,6 @@ public class DataSourcesController(IDataSourceService dataSourceService) : Contr
         [FromBody] CreateDataSourceRequest request,
         CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
-
         var created = await dataSourceService.CreateAsync(request, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
@@ -40,10 +38,8 @@ public class DataSourcesController(IDataSourceService dataSourceService) : Contr
         [FromBody] UpdateDataSourceRequest request,
         CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
-
         var updated = await dataSourceService.UpdateAsync(id, request, cancellationToken);
-        if (updated is null) return NotFound();
+        if (updated is null) return Problem(detail: "Data source not found.", statusCode: 404);
         return Ok(updated);
     }
 
@@ -51,7 +47,7 @@ public class DataSourcesController(IDataSourceService dataSourceService) : Contr
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await dataSourceService.DeleteAsync(id, cancellationToken);
-        if (!deleted) return NotFound();
+        if (!deleted) return Problem(detail: "Data source not found.", statusCode: 404);
         return NoContent();
     }
 
@@ -59,7 +55,7 @@ public class DataSourcesController(IDataSourceService dataSourceService) : Contr
     public async Task<ActionResult<ConnectionTestResponse>> TestConnection(Guid id, CancellationToken cancellationToken)
     {
         var result = await dataSourceService.TestConnectionAsync(id, cancellationToken);
-        if (result is null) return NotFound();
+        if (result is null) return Problem(detail: "Data source not found.", statusCode: 404);
         return Ok(result);
     }
 
@@ -67,7 +63,7 @@ public class DataSourcesController(IDataSourceService dataSourceService) : Contr
     public async Task<ActionResult<SchemaResponse>> GetSchema(Guid id, CancellationToken cancellationToken)
     {
         var schema = await dataSourceService.GetSchemaAsync(id, cancellationToken);
-        if (schema is null) return NotFound();
+        if (schema is null) return Problem(detail: "Data source not found.", statusCode: 404);
         return Ok(schema);
     }
 
@@ -78,7 +74,7 @@ public class DataSourcesController(IDataSourceService dataSourceService) : Contr
         CancellationToken cancellationToken = default)
     {
         var records = await dataSourceService.GetSampleRecordsAsync(id, count, cancellationToken);
-        if (records is null) return NotFound();
+        if (records is null) return Problem(detail: "Data source not found.", statusCode: 404);
         return Ok(records);
     }
 }

@@ -1,5 +1,16 @@
 const BASE_URL = '/api';
 
+export class ApiRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly title: string,
+    public readonly detail: string,
+  ) {
+    super(detail || title || `API error: ${status}`);
+    this.name = 'ApiRequestError';
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     headers: {
@@ -10,7 +21,16 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`API error: ${response.status} ${response.statusText}`);
+    let title = response.statusText;
+    let detail = '';
+    try {
+      const body = await response.json();
+      title = body.title || title;
+      detail = body.detail || '';
+    } catch {
+      // Response body isn't JSON — use defaults
+    }
+    throw new ApiRequestError(response.status, title, detail);
   }
 
   if (response.status === 204) {

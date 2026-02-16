@@ -26,7 +26,7 @@ public class FingerprintConfigsController(IFingerprintConfigService configServic
     public async Task<ActionResult<FingerprintConfigResponse>> GetById(Guid dataSourceId, Guid id, CancellationToken cancellationToken = default)
     {
         var config = await configService.GetByIdAsync(id, cancellationToken);
-        if (config is null || config.DataSourceId != dataSourceId) return NotFound();
+        if (config is null || config.DataSourceId != dataSourceId) return Problem(detail: "Fingerprint config not found.", statusCode: 404);
         return Ok(config);
     }
 
@@ -34,7 +34,7 @@ public class FingerprintConfigsController(IFingerprintConfigService configServic
     public async Task<ActionResult<FingerprintConfigResponse>> Update(Guid dataSourceId, Guid id, [FromBody] UpdateFingerprintConfigRequest request, CancellationToken cancellationToken = default)
     {
         var existing = await configService.GetByIdAsync(id, cancellationToken);
-        if (existing is null || existing.DataSourceId != dataSourceId) return NotFound();
+        if (existing is null || existing.DataSourceId != dataSourceId) return Problem(detail: "Fingerprint config not found.", statusCode: 404);
 
         var config = await configService.UpdateAsync(id, request, cancellationToken);
         return Ok(config);
@@ -44,7 +44,7 @@ public class FingerprintConfigsController(IFingerprintConfigService configServic
     public async Task<IActionResult> Delete(Guid dataSourceId, Guid id, CancellationToken cancellationToken = default)
     {
         var existing = await configService.GetByIdAsync(id, cancellationToken);
-        if (existing is null || existing.DataSourceId != dataSourceId) return NotFound();
+        if (existing is null || existing.DataSourceId != dataSourceId) return Problem(detail: "Fingerprint config not found.", statusCode: 404);
 
         await configService.DeleteAsync(id, cancellationToken);
         return NoContent();

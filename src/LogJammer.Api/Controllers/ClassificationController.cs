@@ -22,7 +22,7 @@ public class ClassificationController(IClassificationQueueService queueService) 
     public async Task<ActionResult<ClassificationQueueResponse>> GetQueueItem(Guid id, CancellationToken cancellationToken = default)
     {
         var item = await queueService.GetByIdAsync(id, cancellationToken);
-        if (item is null) return NotFound();
+        if (item is null) return Problem(detail: "Classification queue item not found.", statusCode: 404);
         return Ok(item);
     }
 
@@ -30,7 +30,7 @@ public class ClassificationController(IClassificationQueueService queueService) 
     public async Task<IActionResult> Approve(Guid id, [FromBody] ApproveClassificationRequest request, CancellationToken cancellationToken = default)
     {
         var success = await queueService.ApproveAsync(id, request, cancellationToken);
-        if (!success) return NotFound();
+        if (!success) return Problem(detail: "Classification queue item not found.", statusCode: 404);
         return NoContent();
     }
 
@@ -38,7 +38,7 @@ public class ClassificationController(IClassificationQueueService queueService) 
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectClassificationRequest request, CancellationToken cancellationToken = default)
     {
         var success = await queueService.RejectAsync(id, request, cancellationToken);
-        if (!success) return NotFound();
+        if (!success) return Problem(detail: "Classification queue item not found.", statusCode: 404);
         return NoContent();
     }
 }

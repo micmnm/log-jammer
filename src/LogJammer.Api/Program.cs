@@ -40,6 +40,9 @@ builder.Services.AddCors(options =>
     });
 });
 
+// ProblemDetails (RFC 7807) for structured error responses
+builder.Services.AddProblemDetails();
+
 // Controllers
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -65,6 +68,9 @@ if (!app.Environment.IsEnvironment("Testing"))
     await ClassificationConfigSeeder.SeedAsync(db, logger);
     await SpikeDetectionRuleSeeder.SeedAsync(db, logger);
 }
+
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 
 // OpenAPI + Scalar UI
 app.MapOpenApi();

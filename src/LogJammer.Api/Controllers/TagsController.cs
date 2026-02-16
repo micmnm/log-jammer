@@ -19,7 +19,7 @@ public class TagsController(ITagService tagService) : ControllerBase
     public async Task<ActionResult<TagResponse>> GetById(Guid id, CancellationToken cancellationToken = default)
     {
         var tag = await tagService.GetByIdAsync(id, cancellationToken);
-        if (tag is null) return NotFound();
+        if (tag is null) return Problem(detail: "Tag not found.", statusCode: 404);
         return Ok(tag);
     }
 
@@ -34,7 +34,7 @@ public class TagsController(ITagService tagService) : ControllerBase
     public async Task<ActionResult<TagResponse>> Update(Guid id, [FromBody] UpdateTagRequest request, CancellationToken cancellationToken = default)
     {
         var tag = await tagService.UpdateAsync(id, request, cancellationToken);
-        if (tag is null) return NotFound();
+        if (tag is null) return Problem(detail: "Tag not found.", statusCode: 404);
         return Ok(tag);
     }
 
@@ -42,7 +42,7 @@ public class TagsController(ITagService tagService) : ControllerBase
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken = default)
     {
         var deleted = await tagService.DeleteAsync(id, cancellationToken);
-        if (!deleted) return NotFound();
+        if (!deleted) return Problem(detail: "Tag not found.", statusCode: 404);
         return NoContent();
     }
 }

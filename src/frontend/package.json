@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "generate-api": "openapi --input http://localhost:5000/openapi/v1.json --output src/api/generated --client fetch"
+    "generate-api": "openapi --input http://localhost:5050/openapi/v1.json --output src/api/generated --client fetch"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

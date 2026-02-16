@@ -26,7 +26,7 @@ public class ErrorGroupsController(IErrorGroupService errorGroupService) : Contr
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var result = await errorGroupService.GetByIdAsync(id, cancellationToken);
-        return result is null ? NotFound() : Ok(result);
+        return result is null ? Problem(detail: "Error group not found.", statusCode: 404) : Ok(result);
     }
 
     [HttpGet("{id:guid}/occurrences")]
@@ -44,13 +44,13 @@ public class ErrorGroupsController(IErrorGroupService errorGroupService) : Contr
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateErrorGroupStatusRequest request, CancellationToken cancellationToken)
     {
         var result = await errorGroupService.UpdateStatusAsync(id, request.Status, cancellationToken);
-        return result is null ? NotFound() : Ok(result);
+        return result is null ? Problem(detail: "Error group not found.", statusCode: 404) : Ok(result);
     }
 
     [HttpPut("{id:guid}/severity")]
     public async Task<IActionResult> UpdateSeverity(Guid id, [FromBody] UpdateErrorGroupSeverityRequest request, CancellationToken cancellationToken)
     {
         var result = await errorGroupService.UpdateSeverityAsync(id, request.Severity, cancellationToken);
-        return result is null ? NotFound() : Ok(result);
+        return result is null ? Problem(detail: "Error group not found.", statusCode: 404) : Ok(result);
     }
 }

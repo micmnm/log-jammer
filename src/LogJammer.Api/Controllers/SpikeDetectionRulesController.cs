@@ -19,7 +19,7 @@ public class SpikeDetectionRulesController(ISpikeDetectionRuleService ruleServic
     public async Task<ActionResult<SpikeDetectionRuleDto>> GetById(Guid id, CancellationToken cancellationToken = default)
     {
         var rule = await ruleService.GetByIdAsync(id, cancellationToken);
-        if (rule is null) return NotFound();
+        if (rule is null) return Problem(detail: "Spike detection rule not found.", statusCode: 404);
         return Ok(rule);
     }
 
@@ -34,7 +34,7 @@ public class SpikeDetectionRulesController(ISpikeDetectionRuleService ruleServic
     public async Task<ActionResult<SpikeDetectionRuleDto>> Update(Guid id, [FromBody] UpdateSpikeDetectionRuleRequest request, CancellationToken cancellationToken = default)
     {
         var rule = await ruleService.UpdateAsync(id, request, cancellationToken);
-        if (rule is null) return NotFound();
+        if (rule is null) return Problem(detail: "Spike detection rule not found.", statusCode: 404);
         return Ok(rule);
     }
 
@@ -42,7 +42,7 @@ public class SpikeDetectionRulesController(ISpikeDetectionRuleService ruleServic
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken = default)
     {
         var deleted = await ruleService.DeleteAsync(id, cancellationToken);
-        if (!deleted) return NotFound();
+        if (!deleted) return Problem(detail: "Spike detection rule not found.", statusCode: 404);
         return NoContent();
     }
 }
