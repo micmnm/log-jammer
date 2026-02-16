@@ -18,6 +18,7 @@ import {
   TextField,
   Box,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ConfidenceBar from './ConfidenceBar';
 import { useApproveClassification, useRejectClassification } from '../api/hooks/useClassification';
@@ -29,6 +30,7 @@ interface ClassificationQueueCardProps {
 }
 
 export default function ClassificationQueueCard({ item }: ClassificationQueueCardProps) {
+  const theme = useTheme();
   const [rejectOpen, setRejectOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<TagResponse[]>([]);
   const [reason, setReason] = useState('');
@@ -95,7 +97,11 @@ export default function ClassificationQueueCard({ item }: ClassificationQueueCar
             {item.suggestedTags.map((tag) => (
               <Box key={tag.tagId} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Chip label={tag.tagName} size="small" color="primary" variant="outlined" />
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontFamily: theme.fontFamilyMono, fontSize: '0.7rem' }}
+                >
                   {Math.round(tag.confidence * 100)}%
                 </Typography>
               </Box>
@@ -111,6 +117,7 @@ export default function ClassificationQueueCard({ item }: ClassificationQueueCar
                 <Box
                   component="pre"
                   sx={{
+                    fontFamily: theme.fontFamilyMono,
                     fontSize: '0.75rem',
                     overflow: 'auto',
                     maxHeight: 300,

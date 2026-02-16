@@ -1,4 +1,5 @@
 import { Box, Card, CardContent, Typography, Grid } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import LabelOffIcon from '@mui/icons-material/LabelOff';
@@ -14,12 +15,22 @@ interface StatCardProps {
 }
 
 function StatCard({ title, value, icon, color }: StatCardProps) {
+  const theme = useTheme();
   return (
     <Card variant="outlined">
       <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <Box sx={{ color, display: 'flex' }}>{icon}</Box>
         <Box>
-          <Typography variant="h4">{value}</Typography>
+          <Typography
+            variant="h4"
+            sx={{
+              fontFamily: theme.fontFamilyMono,
+              fontWeight: 700,
+              letterSpacing: '0.02em',
+            }}
+          >
+            {value}
+          </Typography>
           <Typography variant="body2" color="text.secondary">
             {title}
           </Typography>
@@ -43,7 +54,7 @@ export default function Dashboard() {
             title="Firing Alerts"
             value={firingCount}
             icon={<NotificationsActiveIcon fontSize="large" />}
-            color="#f44336"
+            color="#ff1744"
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
@@ -51,7 +62,7 @@ export default function Dashboard() {
             title="Error Groups"
             value={errorGroupCount}
             icon={<ErrorOutlineIcon fontSize="large" />}
-            color="#ff9800"
+            color="#ff9100"
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
@@ -59,7 +70,7 @@ export default function Dashboard() {
             title="Unclassified"
             value={unclassifiedCount}
             icon={<LabelOffIcon fontSize="large" />}
-            color="#5c9ce6"
+            color="#00e5ff"
           />
         </Grid>
       </Grid>

@@ -42,9 +42,24 @@ export default function AlertCard({ alert, showAcknowledge = true }: AlertCardPr
   const acknowledge = useAcknowledgeAlert();
   const severity = getSeverityFromThreshold(alert);
   const color = severityColors[severity] ?? 'info';
+  const isCritical = severity === 'Critical';
 
   return (
-    <Card variant="outlined" sx={{ mb: 1.5 }}>
+    <Card
+      variant="outlined"
+      sx={{
+        mb: 1.5,
+        ...(isCritical && {
+          borderLeft: '3px solid',
+          borderLeftColor: 'error.main',
+          animation: 'alertPulse 2s ease-in-out infinite',
+          '@keyframes alertPulse': {
+            '0%, 100%': { boxShadow: '0 0 4px rgba(255, 23, 68, 0.1)' },
+            '50%': { boxShadow: '0 0 12px rgba(255, 23, 68, 0.2), -4px 0 16px rgba(255, 23, 68, 0.1)' },
+          },
+        }),
+      }}
+    >
       <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={2}>
           <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -58,7 +73,11 @@ export default function AlertCard({ alert, showAcknowledge = true }: AlertCardPr
             <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
               {alert.knownErrorMessage ?? 'Unknown error'}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontFamily: (theme) => theme.fontFamilyMono, fontSize: '0.7rem' }}
+            >
               Threshold: {alert.thresholdType} {alert.thresholdValue} | Actual: {alert.actualValue}
             </Typography>
           </Box>

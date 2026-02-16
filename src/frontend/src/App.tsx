@@ -13,6 +13,7 @@ import Alerts from './pages/Alerts';
 import Classification from './pages/Classification';
 import DataSources from './pages/DataSources';
 import Settings from './pages/Settings';
+import NotFound from './pages/NotFound';
 
 function AppInner() {
   const { showNotification } = useNotification();
@@ -53,6 +54,7 @@ function AppInner() {
             <Route path="/classification" element={<Classification />} />
             <Route path="/data-sources" element={<DataSources />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>

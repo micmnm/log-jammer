@@ -18,6 +18,7 @@ import {
   Alert,
   TextField,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
@@ -46,6 +47,7 @@ import type { ErrorSeverity, ErrorStatus } from '../api/types';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 export default function ErrorGroupDetail() {
+  const theme = useTheme();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [fromDate, setFromDate] = useState('');
@@ -83,8 +85,8 @@ export default function ErrorGroupDetail() {
       {
         label: 'Extrapolated Count',
         data: occurrences?.map((o) => o.extrapolatedCount) ?? [],
-        borderColor: '#5c9ce6',
-        backgroundColor: 'rgba(92, 156, 230, 0.1)',
+        borderColor: '#00e5ff',
+        backgroundColor: 'rgba(0, 229, 255, 0.1)',
         fill: true,
         tension: 0.3,
       },
@@ -122,11 +124,19 @@ export default function ErrorGroupDetail() {
             </Box>
             <Box>
               <Typography variant="caption" color="text.secondary">Total Occurrences</Typography>
-              <Typography variant="body2">{errorGroup.totalOccurrences}</Typography>
+              <Typography
+                variant="body2"
+                sx={{ fontFamily: theme.fontFamilyMono, fontWeight: 500 }}
+              >
+                {errorGroup.totalOccurrences}
+              </Typography>
             </Box>
             <Box>
               <Typography variant="caption" color="text.secondary">Fingerprint</Typography>
-              <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+              <Typography
+                variant="body2"
+                sx={{ fontFamily: theme.fontFamilyMono, fontSize: '0.75rem' }}
+              >
                 {errorGroup.fingerprintHash}
               </Typography>
             </Box>
@@ -201,8 +211,15 @@ export default function ErrorGroupDetail() {
                 maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                  x: { ticks: { autoSkip: true, maxRotation: 45 } },
-                  y: { beginAtZero: true },
+                  x: {
+                    ticks: { autoSkip: true, maxRotation: 45, color: '#8b949e' },
+                    grid: { color: 'rgba(0, 229, 255, 0.06)' },
+                  },
+                  y: {
+                    beginAtZero: true,
+                    ticks: { color: '#8b949e' },
+                    grid: { color: 'rgba(0, 229, 255, 0.06)' },
+                  },
                 },
               }}
             />
@@ -218,7 +235,13 @@ export default function ErrorGroupDetail() {
           <AccordionDetails>
             <Box
               component="pre"
-              sx={{ fontSize: '0.75rem', overflow: 'auto', maxHeight: 400, m: 0 }}
+              sx={{
+                fontFamily: theme.fontFamilyMono,
+                fontSize: '0.75rem',
+                overflow: 'auto',
+                maxHeight: 400,
+                m: 0,
+              }}
             >
               {errorGroup.representativeStackTrace}
             </Box>

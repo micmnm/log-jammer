@@ -124,8 +124,8 @@ export default function DataSources() {
                   <TableCell>
                     <Switch checked={ds.enabled} onChange={() => handleToggleEnabled(ds)} size="small" />
                   </TableCell>
-                  <TableCell>{ds.pollIntervalSeconds}s</TableCell>
-                  <TableCell>{ds.samplingBudget}</TableCell>
+                  <TableCell sx={{ fontFamily: (theme) => theme.fontFamilyMono }}>{ds.pollIntervalSeconds}s</TableCell>
+                  <TableCell sx={{ fontFamily: (theme) => theme.fontFamilyMono }}>{ds.samplingBudget}</TableCell>
                   <TableCell align="right">
                     <IconButton size="small" onClick={() => handleEdit(ds)} title="Edit">
                       <EditIcon fontSize="small" />
