@@ -31,6 +31,15 @@ const mockDataSources = [
   },
 ];
 
+const mockDeletionImpact = {
+  errorGroupCount: 5,
+  occurrenceCount: 120,
+  alertCount: 3,
+  classificationQueueCount: 2,
+  tagCount: 8,
+  ruleCount: 1,
+};
+
 const mockDeleteMutate = vi.fn();
 const mockUpdateMutate = vi.fn();
 const mockTestMutate = vi.fn();
@@ -65,6 +74,10 @@ vi.mock('../../api/hooks/useDataSources', () => ({
   useDetectLogFile: () => ({
     mutate: vi.fn(),
     isPending: false,
+  }),
+  useDeletionImpact: () => ({
+    data: mockDeletionImpact,
+    isLoading: false,
   }),
 }));
 
@@ -123,21 +136,43 @@ describe('DataSources', () => {
     expect(screen.getByText('Add Data Source', { selector: 'h2' })).toBeInTheDocument();
   });
 
-  it('opens delete confirmation dialog', async () => {
+  it('shows deletion impact in delete dialog', async () => {
     const user = userEvent.setup();
     renderWithProviders(<DataSources />);
     const deleteButtons = screen.getAllByTitle('Delete');
     await user.click(deleteButtons[0]);
     expect(screen.getByText('Delete Data Source')).toBeInTheDocument();
-    expect(screen.getByText('Are you sure you want to delete this data source? This action cannot be undone.')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getAllByText(/error group/).length).toBeGreaterThan(0);
+    expect(screen.getByText('120')).toBeInTheDocument();
+    expect(screen.getAllByText(/occurrence/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/alert/).length).toBeGreaterThan(0);
   });
 
-  it('calls delete when confirmed', async () => {
+  it('shows preserve history checkbox in delete dialog', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DataSources />);
+    const deleteButtons = screen.getAllByTitle('Delete');
+    await user.click(deleteButtons[0]);
+    expect(screen.getByLabelText(/Keep historical error groups/)).toBeInTheDocument();
+  });
+
+  it('calls delete without preserveHistory by default', async () => {
     const user = userEvent.setup();
     renderWithProviders(<DataSources />);
     const deleteButtons = screen.getAllByTitle('Delete');
     await user.click(deleteButtons[0]);
     await user.click(screen.getByRole('button', { name: 'Delete' }));
-    expect(mockDeleteMutate).toHaveBeenCalledWith('ds-1');
+    expect(mockDeleteMutate).toHaveBeenCalledWith({ id: 'ds-1', preserveHistory: false });
+  });
+
+  it('calls delete with preserveHistory when checkbox is checked', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DataSources />);
+    const deleteButtons = screen.getAllByTitle('Delete');
+    await user.click(deleteButtons[0]);
+    await user.click(screen.getByLabelText(/Keep historical error groups/));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(mockDeleteMutate).toHaveBeenCalledWith({ id: 'ds-1', preserveHistory: true });
   });
 });

@@ -95,3 +95,13 @@ public record RawLogEntryDto
     public DateTime Timestamp { get; init; }
     public required Dictionary<string, object?> Fields { get; init; }
 }
+
+public record DeletionImpactResponse
+{
+    public int ErrorGroupCount { get; init; }
+    public int OccurrenceCount { get; init; }
+    public int AlertCount { get; init; }
+    public int ClassificationQueueCount { get; init; }
+    public int TagCount { get; init; }
+    public int RuleCount { get; init; }
+}

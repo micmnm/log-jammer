@@ -46,10 +46,21 @@ public class DataSourcesController(
         return Ok(updated);
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    [HttpGet("{id:guid}/deletion-impact")]
+    public async Task<ActionResult<DeletionImpactResponse>> GetDeletionImpact(Guid id, CancellationToken cancellationToken)
     {
-        var deleted = await dataSourceService.DeleteAsync(id, cancellationToken);
+        var impact = await dataSourceService.GetDeletionImpactAsync(id, cancellationToken);
+        if (impact is null) return Problem(detail: "Data source not found.", statusCode: 404);
+        return Ok(impact);
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid id,
+        [FromQuery] bool preserveHistory = false,
+        CancellationToken cancellationToken = default)
+    {
+        var deleted = await dataSourceService.DeleteAsync(id, preserveHistory, cancellationToken);
         if (!deleted) return Problem(detail: "Data source not found.", statusCode: 404);
         return NoContent();
     }

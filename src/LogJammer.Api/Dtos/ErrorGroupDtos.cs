@@ -12,7 +12,7 @@ public class ErrorGroupResponse
     public DateTime FirstSeen { get; set; }
     public DateTime LastSeen { get; set; }
     public long TotalOccurrences { get; set; }
-    public Guid DataSourceId { get; set; }
+    public Guid? DataSourceId { get; set; }
     public string? DataSourceName { get; set; }
 }
 

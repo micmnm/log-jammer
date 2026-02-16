@@ -17,11 +17,16 @@ Base URL: `http://localhost:5000`
 | GET | `/api/datasources/{id}` | Get data source by ID | Implemented |
 | POST | `/api/datasources` | Create data source | Implemented |
 | PUT | `/api/datasources/{id}` | Update data source | Implemented |
-| DELETE | `/api/datasources/{id}` | Delete data source | Implemented |
+| GET | `/api/datasources/{id}/deletion-impact` | Get cascade deletion impact counts | Implemented |
+| DELETE | `/api/datasources/{id}?preserveHistory=false` | Delete data source (optionally preserve error groups) | Implemented |
 | POST | `/api/datasources/{id}/test` | Test data source connection | Implemented |
 | GET | `/api/datasources/{id}/schema` | Get data source schema | Implemented |
 | GET | `/api/datasources/{id}/sample` | Get sample records (query: count) | Implemented |
 | POST | `/api/datasources/detect` | Auto-detect log file format and propose config | Implemented |
+
+**GET /api/datasources/{id}/deletion-impact**: Returns counts of all data that would be cascade-deleted: errorGroupCount, occurrenceCount, alertCount, classificationQueueCount, tagCount, ruleCount. Status codes: 200, 404.
+
+**DELETE /api/datasources/{id}?preserveHistory=false**: When `preserveHistory=true`, detaches KnownErrors (sets DataSourceId=null) before deleting the DataSource, preserving error groups and their child data (occurrences, alerts, tags, overrides). When `preserveHistory=false` (default), cascade-deletes everything. Status codes: 204, 404.
 
 **POST /api/datasources/detect**: Accepts `{ filePath: string }`. Reads up to 200 lines, detects JSON vs text format (>80% JSON parse threshold), infers timestamp/level/message field roles, returns proposed connection config. Path validated against allowed directories. Status codes: 200, 400 (empty file), 403 (path not allowed), 404 (file not found).
 

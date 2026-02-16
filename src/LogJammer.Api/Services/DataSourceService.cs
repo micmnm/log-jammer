@@ -54,13 +54,34 @@ public class DataSourceService(
         return MapToResponse(dataSource);
     }
 
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(Guid id, bool preserveHistory = false, CancellationToken cancellationToken = default)
     {
         var dataSource = await repository.GetByIdAsync(id, cancellationToken);
         if (dataSource is null) return false;
 
+        if (preserveHistory)
+            await repository.DetachKnownErrorsAsync(id, cancellationToken);
+
         await repository.DeleteAsync(dataSource, cancellationToken);
         return true;
+    }
+
+    public async Task<DeletionImpactResponse?> GetDeletionImpactAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        if (!await repository.ExistsAsync(id, cancellationToken))
+            return null;
+
+        var impact = await repository.GetDeletionImpactAsync(id, cancellationToken);
+
+        return new DeletionImpactResponse
+        {
+            ErrorGroupCount = impact.ErrorGroupCount,
+            OccurrenceCount = impact.OccurrenceCount,
+            AlertCount = impact.AlertCount,
+            ClassificationQueueCount = impact.ClassificationQueueCount,
+            TagCount = impact.TagCount,
+            RuleCount = impact.RuleCount
+        };
     }
 
     public async Task<ConnectionTestResponse?> TestConnectionAsync(Guid id, CancellationToken cancellationToken = default)

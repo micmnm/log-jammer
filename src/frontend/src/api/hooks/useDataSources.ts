@@ -8,6 +8,7 @@ import type {
   SchemaResponse,
   SampleRecordsResponse,
   DetectResponse,
+  DeletionImpactResponse,
 } from '../types';
 
 export function useDataSources() {
@@ -50,10 +51,19 @@ export function useUpdateDataSource() {
 export function useDeleteDataSource() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.delete(`/datasources/${id}`),
+    mutationFn: ({ id, preserveHistory = false }: { id: string; preserveHistory?: boolean }) =>
+      api.delete(`/datasources/${id}?preserveHistory=${preserveHistory}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['datasources'] });
     },
+  });
+}
+
+export function useDeletionImpact(id: string | null) {
+  return useQuery({
+    queryKey: ['datasources', id, 'deletion-impact'],
+    queryFn: () => api.get<DeletionImpactResponse>(`/datasources/${id}/deletion-impact`),
+    enabled: !!id,
   });
 }
 

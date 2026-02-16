@@ -147,7 +147,7 @@ public class DataSourcesControllerTests : IDisposable
     public async Task Delete_ReturnsNoContent()
     {
         var id = Guid.NewGuid();
-        _service.DeleteAsync(id, Arg.Any<CancellationToken>())
+        _service.DeleteAsync(id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         var response = await _client.DeleteAsync($"/api/datasources/{id}");

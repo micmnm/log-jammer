@@ -82,7 +82,7 @@
 | LastSeen | DateTime | last_seen | |
 | TotalOccurrences | long | total_occurrences | |
 | OccurrenceWindows | string? | occurrence_windows | jsonb |
-| DataSourceId | Guid | data_source_id | FK → data_sources |
+| DataSourceId | Guid? | data_source_id | FK → data_sources (nullable, null = orphaned/preserved) |
 | CreatedAt | DateTime | created_at | auto-set |
 | UpdatedAt | DateTime | updated_at | auto-set |
 
@@ -416,6 +416,15 @@
 - `TagName` → `string`
 - `Confidence` → `double`
 
+### DeletionImpact
+`LogJammer.Core.Models.DeletionImpact`
+- `ErrorGroupCount` → `int`
+- `OccurrenceCount` → `int`
+- `AlertCount` → `int`
+- `ClassificationQueueCount` → `int`
+- `TagCount` → `int`
+- `RuleCount` → `int`
+
 ### LogFileConnectionConfig
 `LogJammer.Infrastructure.Adapters.LogFile.LogFileConnectionConfig`
 - `FilePath` → `string` (required, singular file path)
@@ -463,6 +472,10 @@
 - `ApproveClassificationRequest`: `TagIds` → `List<Guid>`
 - `RejectClassificationRequest`: `CorrectTagIds` → `List<Guid>`, `Reason` (optional)
 
+### DeletionImpactResponse (DTO)
+`LogJammer.Api.Dtos.DataSourceDtos`
+- `DeletionImpactResponse`: `ErrorGroupCount`, `OccurrenceCount`, `AlertCount`, `ClassificationQueueCount`, `TagCount`, `RuleCount` (all `int`)
+
 ---
 
 ## Frontend (TypeScript)
@@ -474,7 +487,7 @@ TypeScript type definitions mirror the backend DTOs. Generated from backend API 
 ### Key Types
 - `AlertDto`, `AlertListResponse` – mirrors `LogJammer.Api.Dtos.AlertDto`/`AlertListResponse`
 - `CorrelatedSpikeAlertDto` – mirrors `LogJammer.Api.Dtos.CorrelatedSpikeAlertDto`
-- `ErrorGroupResponse`, `ErrorGroupsPagedResponse` – mirrors `LogJammer.Api.Dtos.ErrorGroupResponse`
+- `ErrorGroupResponse`, `ErrorGroupsPagedResponse` – mirrors `LogJammer.Api.Dtos.ErrorGroupResponse` (dataSourceId is `string | null` for orphaned groups)
 - `ErrorGroupDetailResponse` – extends `ErrorGroupResponse` with `representativeStackTrace`
 - `ErrorOccurrenceResponse` – mirrors occurrence window data (windowStart, windowEnd, count, sampleRatio, extrapolatedCount)
 - `DataSourceResponse` – mirrors `LogJammer.Api.Dtos.DataSourceResponse` (id, name, adapterType, connectionConfig, pollIntervalSeconds, schemaMapping, samplingBudget, enabled, fingerprintConfigs)
@@ -482,6 +495,7 @@ TypeScript type definitions mirror the backend DTOs. Generated from backend API 
 - `ConnectionTestResponse` – connection test result (success, errorMessage, latencyMs, metadata)
 - `SchemaResponse`, `FieldDefinitionDto` – schema discovery types
 - `SampleRecordsResponse`, `RawLogEntryDto` – sample records types
+- `DeletionImpactResponse` – deletion impact counts (errorGroupCount, occurrenceCount, alertCount, classificationQueueCount, tagCount, ruleCount)
 - `FingerprintConfigResponse`, `CreateFingerprintConfigRequest` – fingerprint config types
 - `TagResponse` – mirrors `LogJammer.Api.Dtos.TagResponse` (id, name, tagType, color, createdAt)
 - `CreateTagRequest`, `UpdateTagRequest` – tag CRUD request types
@@ -493,7 +507,7 @@ TypeScript type definitions mirror the backend DTOs. Generated from backend API 
 ### Hooks (`src/api/hooks/`)
 - `useAlerts.ts` – useAlerts, useAlertHistory, useCorrelatedAlerts, useAcknowledgeAlert
 - `useDashboard.ts` – useDashboardStats (aggregates alert/error/queue counts)
-- `useDataSources.ts` – useDataSources, useDataSource, useCreateDataSource, useUpdateDataSource, useDeleteDataSource, useTestConnection, useDataSourceSchema, useSampleRecords
+- `useDataSources.ts` – useDataSources, useDataSource, useCreateDataSource, useUpdateDataSource, useDeleteDataSource, useTestConnection, useDataSourceSchema, useSampleRecords, useDeletionImpact
 - `useErrorGroups.ts` – useErrorGroups, useErrorGroup, useErrorGroupOccurrences, useUpdateErrorGroupStatus, useUpdateErrorGroupSeverity
 - `useTags.ts` – useTags, useCreateTag, useUpdateTag, useDeleteTag
 - `useClassification.ts` – useClassificationQueue, useApproveClassification, useRejectClassification

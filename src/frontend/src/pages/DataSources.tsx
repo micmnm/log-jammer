@@ -16,10 +16,14 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogContentText,
   DialogActions,
   Alert,
+  Checkbox,
+  FormControlLabel,
+  CircularProgress,
+  Divider,
 } from '@mui/material';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SchemaIcon from '@mui/icons-material/AccountTree';
@@ -31,6 +35,7 @@ import {
   useDeleteDataSource,
   useUpdateDataSource,
   useTestConnection,
+  useDeletionImpact,
 } from '../api/hooks/useDataSources';
 import type { DataSourceResponse, ConnectionTestResponse } from '../api/types';
 import DataSourceDialog from '../components/DataSourceDialog';
@@ -46,9 +51,12 @@ export default function DataSources() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDs, setEditingDs] = useState<DataSourceResponse | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [preserveHistory, setPreserveHistory] = useState(false);
   const [schemaDs, setSchemaDs] = useState<DataSourceResponse | null>(null);
   const [fingerprintDs, setFingerprintDs] = useState<DataSourceResponse | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; result: ConnectionTestResponse } | null>(null);
+
+  const { data: deletionImpact, isLoading: impactLoading } = useDeletionImpact(deleteConfirmId);
 
   const handleAdd = () => {
     setEditingDs(null);
@@ -60,9 +68,14 @@ export default function DataSources() {
     setDialogOpen(true);
   };
 
+  const handleOpenDeleteDialog = (id: string) => {
+    setPreserveHistory(false);
+    setDeleteConfirmId(id);
+  };
+
   const handleDelete = () => {
     if (deleteConfirmId) {
-      deleteDataSource.mutate(deleteConfirmId);
+      deleteDataSource.mutate({ id: deleteConfirmId, preserveHistory });
       setDeleteConfirmId(null);
     }
   };
@@ -144,7 +157,7 @@ export default function DataSources() {
                     >
                       <NetworkCheckIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => setDeleteConfirmId(ds.id)} title="Delete">
+                    <IconButton size="small" onClick={() => handleOpenDeleteDialog(ds.id)} title="Delete">
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>
@@ -186,16 +199,128 @@ export default function DataSources() {
         />
       )}
 
-      <Dialog open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)}>
-        <DialogTitle>Delete Data Source</DialogTitle>
+      <Dialog open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningAmberIcon color="warning" />
+          Delete Data Source
+        </DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this data source? This action cannot be undone.
-          </DialogContentText>
+          {impactLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : deletionImpact ? (
+            <Box>
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                This will permanently delete the data source and all associated data.
+              </Alert>
+
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Cascade impact:
+              </Typography>
+              <Box
+                component="ul"
+                sx={{
+                  pl: 2,
+                  mb: 2,
+                  fontFamily: (theme) => theme.fontFamilyMono,
+                  '& li': { py: 0.25 },
+                }}
+              >
+                {deletionImpact.errorGroupCount > 0 && (
+                  <li>
+                    <Typography variant="body2" component="span" color="error.main">
+                      {deletionImpact.errorGroupCount}
+                    </Typography>{' '}
+                    error group{deletionImpact.errorGroupCount !== 1 ? 's' : ''}
+                  </li>
+                )}
+                {deletionImpact.occurrenceCount > 0 && (
+                  <li>
+                    <Typography variant="body2" component="span" color="error.main">
+                      {deletionImpact.occurrenceCount}
+                    </Typography>{' '}
+                    occurrence{deletionImpact.occurrenceCount !== 1 ? 's' : ''}
+                  </li>
+                )}
+                {deletionImpact.alertCount > 0 && (
+                  <li>
+                    <Typography variant="body2" component="span" color="error.main">
+                      {deletionImpact.alertCount}
+                    </Typography>{' '}
+                    alert{deletionImpact.alertCount !== 1 ? 's' : ''}
+                  </li>
+                )}
+                {deletionImpact.classificationQueueCount > 0 && (
+                  <li>
+                    <Typography variant="body2" component="span" color="error.main">
+                      {deletionImpact.classificationQueueCount}
+                    </Typography>{' '}
+                    classification queue item{deletionImpact.classificationQueueCount !== 1 ? 's' : ''}
+                  </li>
+                )}
+                {deletionImpact.tagCount > 0 && (
+                  <li>
+                    <Typography variant="body2" component="span" color="error.main">
+                      {deletionImpact.tagCount}
+                    </Typography>{' '}
+                    tag assignment{deletionImpact.tagCount !== 1 ? 's' : ''}
+                  </li>
+                )}
+                {deletionImpact.ruleCount > 0 && (
+                  <li>
+                    <Typography variant="body2" component="span" color="error.main">
+                      {deletionImpact.ruleCount}
+                    </Typography>{' '}
+                    spike detection rule{deletionImpact.ruleCount !== 1 ? 's' : ''}
+                  </li>
+                )}
+                {deletionImpact.errorGroupCount === 0 &&
+                  deletionImpact.occurrenceCount === 0 &&
+                  deletionImpact.alertCount === 0 && (
+                    <li>
+                      <Typography variant="body2" color="text.secondary">
+                        No associated data found.
+                      </Typography>
+                    </li>
+                  )}
+              </Box>
+
+              {deletionImpact.errorGroupCount > 0 && (
+                <>
+                  <Divider sx={{ my: 1.5 }} />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={preserveHistory}
+                        onChange={(e) => setPreserveHistory(e.target.checked)}
+                      />
+                    }
+                    label="Keep historical error groups for future classification"
+                  />
+                  {preserveHistory && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4 }}>
+                      Error groups and their occurrences, alerts, and tags will be preserved but
+                      detached from this data source.
+                    </Typography>
+                  )}
+                </>
+              )}
+            </Box>
+          ) : (
+            <Typography color="text.secondary">
+              Are you sure you want to delete this data source?
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
-          <Button onClick={handleDelete} color="error" variant="contained">
+          <Button
+            onClick={handleDelete}
+            color="error"
+            variant="contained"
+            disabled={impactLoading}
+          >
             Delete
           </Button>
         </DialogActions>

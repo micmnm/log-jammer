@@ -32,6 +32,7 @@ public class KnownErrorConfiguration : IEntityTypeConfiguration<KnownError>
         builder.HasOne(e => e.DataSource)
             .WithMany(d => d.KnownErrors)
             .HasForeignKey(e => e.DataSourceId)
+            .IsRequired(false)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

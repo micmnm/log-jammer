@@ -16,7 +16,7 @@ public class KnownError
     public DateTime LastSeen { get; set; }
     public long TotalOccurrences { get; set; }
     public string? OccurrenceWindows { get; set; } // JSON
-    public Guid DataSourceId { get; set; }
+    public Guid? DataSourceId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

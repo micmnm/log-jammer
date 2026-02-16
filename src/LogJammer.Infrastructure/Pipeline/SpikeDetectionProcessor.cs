@@ -54,8 +54,8 @@ public class SpikeDetectionProcessor(
         var correlationDetector = scope.ServiceProvider.GetRequiredService<ICorrelationDetector>();
 
         var knownErrors = await context.KnownErrors
-            .Where(e => e.Status == Core.Enums.ErrorStatus.Active)
-            .Select(e => new { e.Id, e.DataSourceId })
+            .Where(e => e.Status == Core.Enums.ErrorStatus.Active && e.DataSourceId != null)
+            .Select(e => new { e.Id, DataSourceId = e.DataSourceId!.Value })
             .AsNoTracking()
             .ToListAsync(ct);
 
