@@ -147,6 +147,11 @@ public class ClassificationQueueService(
             StackTrace = item.KnownError?.RepresentativeStackTrace,
             SuggestedTags = suggestedTags,
             Confidence = item.Confidence,
+            Severity = item.KnownError?.Severity ?? Core.Enums.ErrorSeverity.Warning,
+            Status = item.KnownError?.Status ?? Core.Enums.ErrorStatus.Active,
+            FirstSeen = item.KnownError?.FirstSeen ?? item.CreatedAt,
+            LastSeen = item.KnownError?.LastSeen ?? item.CreatedAt,
+            TotalOccurrences = item.KnownError?.TotalOccurrences ?? 0,
             CreatedAt = item.CreatedAt
         };
     }

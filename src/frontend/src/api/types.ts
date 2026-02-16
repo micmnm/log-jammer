@@ -46,7 +46,7 @@ export interface ErrorGroupResponse {
   firstSeen: string;
   lastSeen: string;
   totalOccurrences: number;
-  dataSourceId: string;
+  dataSourceId: string | null;
   dataSourceName: string | null;
 }
 
@@ -64,6 +64,11 @@ export interface ClassificationQueueResponse {
   stackTrace: string | null;
   suggestedTags: TagSuggestionResponse[];
   confidence: number | null;
+  severity: ErrorSeverity;
+  status: ErrorStatus;
+  firstSeen: string;
+  lastSeen: string;
+  totalOccurrences: number;
   createdAt: string;
 }
 
@@ -230,6 +235,15 @@ export interface ConfigurationResponse {
 export interface UpdateConfigurationRequest {
   key: string;
   value: string;
+}
+
+export interface DeletionImpactResponse {
+  errorGroupCount: number;
+  occurrenceCount: number;
+  alertCount: number;
+  classificationQueueCount: number;
+  tagCount: number;
+  ruleCount: number;
 }
 
 export interface DetectedFieldDto {

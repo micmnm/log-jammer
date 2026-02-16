@@ -88,10 +88,10 @@ Base URL: `http://localhost:5000`
 
 | Method | Path | Description | Status |
 |--------|------|-------------|--------|
-| GET | `/api/classification/queue` | List pending classification items (query: page, pageSize) | Implemented |
-| GET | `/api/classification/queue/{id}` | Get single classification queue item | Implemented |
-| POST | `/api/classification/queue/{id}/approve` | Accept suggested tags | Implemented |
-| POST | `/api/classification/queue/{id}/reject` | Reject with user-provided tags | Implemented |
+| GET | `/api/classification/queue` | List pending classification items (query: page, pageSize). Response includes error context: severity, status, firstSeen, lastSeen, totalOccurrences from KnownError | Implemented |
+| GET | `/api/classification/queue/{id}` | Get single classification queue item (includes error context fields) | Implemented |
+| POST | `/api/classification/queue/{id}/approve` | Accept suggested tags (or user-assigned tags for unmatched items) | Implemented |
+| POST | `/api/classification/queue/{id}/reject` | Reject with user-provided tags and optional reason | Implemented |
 
 ## Static Files & SPA
 

@@ -1,3 +1,5 @@
+using LogJammer.Core.Enums;
+
 namespace LogJammer.Api.Dtos;
 
 public class ClassificationQueueResponse
@@ -8,6 +10,11 @@ public class ClassificationQueueResponse
     public string? StackTrace { get; set; }
     public List<TagSuggestionResponse> SuggestedTags { get; set; } = [];
     public double? Confidence { get; set; }
+    public ErrorSeverity Severity { get; set; }
+    public ErrorStatus Status { get; set; }
+    public DateTime FirstSeen { get; set; }
+    public DateTime LastSeen { get; set; }
+    public long TotalOccurrences { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

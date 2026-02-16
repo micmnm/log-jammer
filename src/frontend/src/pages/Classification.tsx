@@ -13,7 +13,7 @@ import { useClassificationQueue } from '../api/hooks/useClassification';
 import ClassificationQueueCard from '../components/ClassificationQueueCard';
 import type { ClassificationQueueResponse } from '../api/types';
 
-type ConfidenceBand = 'all' | 'high' | 'medium' | 'low';
+type ConfidenceBand = 'all' | 'high' | 'medium' | 'low' | 'unmatched';
 
 function getConfidenceBand(confidence: number | null): Exclude<ConfidenceBand, 'all'> | null {
   if (confidence == null) return null;
@@ -24,6 +24,7 @@ function getConfidenceBand(confidence: number | null): Exclude<ConfidenceBand, '
 
 function matchesBand(item: ClassificationQueueResponse, band: ConfidenceBand): boolean {
   if (band === 'all') return true;
+  if (band === 'unmatched') return item.suggestedTags.length === 0;
   return getConfidenceBand(item.confidence) === band;
 }
 
@@ -77,10 +78,14 @@ export default function Classification() {
     let high = 0;
     let medium = 0;
     let low = 0;
+    let unmatched = 0;
     let sum = 0;
     let count = 0;
 
     for (const item of items) {
+      if (item.suggestedTags.length === 0) {
+        unmatched++;
+      }
       const band = getConfidenceBand(item.confidence);
       if (band === 'high') high++;
       else if (band === 'medium') medium++;
@@ -97,6 +102,7 @@ export default function Classification() {
       high,
       medium,
       low,
+      unmatched,
       avgConfidence: count > 0 ? Math.round((sum / count) * 100) : null,
     };
   }, [data]);
@@ -118,6 +124,7 @@ export default function Classification() {
           <StatBox label="High ≥70%" value={stats.high} color="#00e676" />
           <StatBox label="Medium 40–69%" value={stats.medium} color="#ffb300" />
           <StatBox label="Low <40%" value={stats.low} color="#ff1744" />
+          <StatBox label="Unmatched" value={stats.unmatched} color="#bdbdbd" />
           {stats.avgConfidence != null && (
             <StatBox label="Avg Confidence" value={`${stats.avgConfidence}%`} color="#e6edf3" />
           )}
@@ -136,6 +143,7 @@ export default function Classification() {
           <ToggleButton value="high">HIGH ≥70%</ToggleButton>
           <ToggleButton value="medium">MEDIUM 40–69%</ToggleButton>
           <ToggleButton value="low">LOW &lt;40%</ToggleButton>
+          <ToggleButton value="unmatched">UNMATCHED</ToggleButton>
         </ToggleButtonGroup>
       )}
 

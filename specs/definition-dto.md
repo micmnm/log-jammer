@@ -455,6 +455,14 @@
 - `DetectedFieldDto`: `Name`, `Type`, `ProposedRole`
 - `DetectedConfigDto`: `FilePath`, `ParseMode`, `TimestampField`, `LevelField`, `MessageField`, `RegexPattern`
 
+### ClassificationQueueResponse / ClassificationQueuePagedResponse (DTOs)
+`LogJammer.Api.Dtos.ClassificationDtos`
+- `ClassificationQueueResponse`: `Id`, `KnownErrorId`, `Message`, `StackTrace`, `SuggestedTags` → `List<TagSuggestionResponse>`, `Confidence`, `Severity` (ErrorSeverity), `Status` (ErrorStatus), `FirstSeen`, `LastSeen`, `TotalOccurrences`, `CreatedAt`
+- `TagSuggestionResponse`: `TagId`, `TagName`, `Confidence`
+- `ClassificationQueuePagedResponse`: `Items` → `IReadOnlyList<ClassificationQueueResponse>`, `TotalCount`, `Page`, `PageSize`
+- `ApproveClassificationRequest`: `TagIds` → `List<Guid>`
+- `RejectClassificationRequest`: `CorrectTagIds` → `List<Guid>`, `Reason` (optional)
+
 ---
 
 ## Frontend (TypeScript)
@@ -479,7 +487,7 @@ TypeScript type definitions mirror the backend DTOs. Generated from backend API 
 - `CreateTagRequest`, `UpdateTagRequest` – tag CRUD request types
 - `SpikeDetectionRuleDto`, `CreateSpikeDetectionRuleRequest`, `UpdateSpikeDetectionRuleRequest` – spike detection rule types
 - `ConfigurationResponse`, `UpdateConfigurationRequest` – classification configuration types
-- `ClassificationQueueResponse`, `ClassificationQueuePagedResponse` – mirrors `LogJammer.Api.Dtos.ClassificationQueueResponse`
+- `ClassificationQueueResponse`, `ClassificationQueuePagedResponse` – mirrors `LogJammer.Api.Dtos.ClassificationQueueResponse` (includes severity, status, firstSeen, lastSeen, totalOccurrences from KnownError)
 - Enums as string union types: `AlertStatus`, `ErrorSeverity`, `ErrorStatus`, `ThresholdType`, `AdapterType`, `TagType`
 
 ### Hooks (`src/api/hooks/`)
@@ -498,7 +506,7 @@ TypeScript type definitions mirror the backend DTOs. Generated from backend API 
 - `Alerts` – active/history tabs with pagination
 - `ErrorGroups` – DataGrid with server-side pagination, severity/status/data source filters
 - `ErrorGroupDetail` – header, metadata, severity/status controls, occurrence chart (Chart.js), stack trace accordion, related alerts
-- `Classification` – paginated queue cards with approve/reject flow
+- `Classification` – paginated queue cards with ML suggestion box / UNMATCHED state, Accept Tags / Reject & Retag / Assign Tags flows, UNMATCHED filter chip, inline tag creation with color picker
 - `DataSources` – table with CRUD, toggle enabled, test connection, schema mapping, fingerprint config dialogs
 - `Settings` – tabs: Rules (spike detection CRUD), Tags (CRUD with color picker), Classification (key-value config editor)
 
