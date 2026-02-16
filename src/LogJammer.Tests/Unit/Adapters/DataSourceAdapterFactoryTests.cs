@@ -35,7 +35,7 @@ public class DataSourceAdapterFactoryTests
     [Fact]
     public void CreateAdapter_LogFile_ReturnsLogFileAdapter()
     {
-        var config = JsonSerializer.Serialize(new { filePaths = new[] { "/tmp/test.log" }, parseMode = "jsonlines" });
+        var config = JsonSerializer.Serialize(new { filePath = "/tmp/test.log", parseMode = "jsonlines" });
 
         var adapter = _factory.CreateAdapter(AdapterType.LogFile, config);
 

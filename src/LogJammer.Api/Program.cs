@@ -38,6 +38,17 @@ try
         ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
     builder.Services.AddLogJammerDatabase(connectionString);
     builder.Services.AddDataSourceAdapters();
+    builder.Services.AddSingleton<LogJammer.Core.Interfaces.ILogFileDetectService>(sp =>
+    {
+        var env = sp.GetRequiredService<IWebHostEnvironment>();
+        var allowedDirs = new List<string>
+        {
+            Path.Combine(env.ContentRootPath, "logs"),
+            Path.Combine(env.ContentRootPath, "data"),
+            Path.GetFullPath(Path.Combine(env.ContentRootPath, "..", "..", "logs"))
+        };
+        return new LogJammer.Infrastructure.Adapters.LogFile.LogFileDetectService(allowedDirs);
+    });
 
     // Services
     builder.Services.AddScoped<LogJammer.Api.Services.IDataSourceService, LogJammer.Api.Services.DataSourceService>();

@@ -1,12 +1,15 @@
 using LogJammer.Api.Dtos;
 using LogJammer.Api.Services;
+using LogJammer.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LogJammer.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class DataSourcesController(IDataSourceService dataSourceService) : ControllerBase
+public class DataSourcesController(
+    IDataSourceService dataSourceService,
+    ILogFileDetectService logFileDetectService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<DataSourceResponse>>> GetAll(CancellationToken cancellationToken)
@@ -76,5 +79,48 @@ public class DataSourcesController(IDataSourceService dataSourceService) : Contr
         var records = await dataSourceService.GetSampleRecordsAsync(id, count, cancellationToken);
         if (records is null) return Problem(detail: "Data source not found.", statusCode: 404);
         return Ok(records);
+    }
+
+    [HttpPost("detect")]
+    public async Task<ActionResult<DetectResponse>> Detect(
+        [FromBody] DetectRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await logFileDetectService.DetectAsync(request.FilePath, cancellationToken);
+            return Ok(new DetectResponse
+            {
+                DetectedFormat = result.DetectedFormat,
+                Fields = result.Fields.Select(f => new DetectedFieldDto
+                {
+                    Name = f.Name,
+                    Type = f.Type,
+                    ProposedRole = f.ProposedRole
+                }).ToList(),
+                SampleRecords = result.SampleRecords,
+                ProposedConfig = new DetectedConfigDto
+                {
+                    FilePath = result.ProposedConfig.FilePath,
+                    ParseMode = result.ProposedConfig.ParseMode,
+                    TimestampField = result.ProposedConfig.TimestampField,
+                    LevelField = result.ProposedConfig.LevelField,
+                    MessageField = result.ProposedConfig.MessageField,
+                    RegexPattern = result.ProposedConfig.RegexPattern
+                }
+            });
+        }
+        catch (FileNotFoundException)
+        {
+            return Problem(detail: "File not found.", statusCode: 404);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Problem(detail: "File path is not in an allowed directory.", statusCode: 403);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 400);
+        }
     }
 }
