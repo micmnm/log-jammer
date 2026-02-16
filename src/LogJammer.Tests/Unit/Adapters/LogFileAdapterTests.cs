@@ -27,12 +27,12 @@ public class LogFileAdapterTests : IDisposable
         return path;
     }
 
-    private static string MakeConfig(string[] filePaths, string parseMode = "jsonlines",
+    private static string MakeConfig(string filePath, string parseMode = "jsonlines",
         string? regexPattern = null, string? timestampField = null, string? timestampFormat = null)
     {
         return JsonSerializer.Serialize(new
         {
-            filePaths,
+            filePath,
             parseMode,
             regexPattern,
             timestampField,
@@ -44,7 +44,7 @@ public class LogFileAdapterTests : IDisposable
     public void Constructor_WithValidJsonLinesConfig_Succeeds()
     {
         var path = CreateTempFile("");
-        var config = MakeConfig([path]);
+        var config = MakeConfig(path);
 
         var adapter = new LogFileAdapter(config);
 
@@ -55,7 +55,7 @@ public class LogFileAdapterTests : IDisposable
     public void Constructor_WithRegexMode_RequiresPattern()
     {
         var path = CreateTempFile("");
-        var config = MakeConfig([path], parseMode: "regex");
+        var config = MakeConfig(path, parseMode: "regex");
 
         var act = () => new LogFileAdapter(config);
 
@@ -67,7 +67,7 @@ public class LogFileAdapterTests : IDisposable
     public void Constructor_WithRegexModeAndPattern_Succeeds()
     {
         var path = CreateTempFile("");
-        var config = MakeConfig([path], parseMode: "regex",
+        var config = MakeConfig(path, parseMode: "regex",
             regexPattern: @"(?<timestamp>\S+) (?<level>\S+) (?<message>.+)");
 
         var adapter = new LogFileAdapter(config);
@@ -79,20 +79,20 @@ public class LogFileAdapterTests : IDisposable
     public async Task TestConnection_WithExistingFiles_ReturnsSuccess()
     {
         var path = CreateTempFile("test content");
-        var config = MakeConfig([path]);
+        var config = MakeConfig(path);
         var adapter = new LogFileAdapter(config);
 
         var result = await adapter.TestConnectionAsync();
 
         result.Success.Should().BeTrue();
         result.ErrorMessage.Should().BeNull();
-        result.Metadata.Should().ContainKey("fileCount");
+        result.Metadata.Should().ContainKey("parseMode");
     }
 
     [Fact]
     public async Task TestConnection_WithMissingFile_ReturnsFailure()
     {
-        var config = MakeConfig(["/nonexistent/file.log"]);
+        var config = MakeConfig("/nonexistent/file.log");
         var adapter = new LogFileAdapter(config);
 
         var result = await adapter.TestConnectionAsync();
@@ -110,7 +110,7 @@ public class LogFileAdapterTests : IDisposable
             "{\"timestamp\":\"2024-01-01T00:02:00Z\",\"level\":\"info\",\"message\":\"test3\"}"
         );
         var path = CreateTempFile(lines);
-        var config = MakeConfig([path], timestampField: "timestamp");
+        var config = MakeConfig(path, timestampField: "timestamp");
         var adapter = new LogFileAdapter(config);
 
         var records = await adapter.GetSampleRecordsAsync(10);
@@ -128,7 +128,7 @@ public class LogFileAdapterTests : IDisposable
             "2024-01-01T00:01:00Z WARN test message 2"
         );
         var path = CreateTempFile(lines);
-        var config = MakeConfig([path], parseMode: "regex",
+        var config = MakeConfig(path, parseMode: "regex",
             regexPattern: @"(?<timestamp>\S+)\s+(?<level>\S+)\s+(?<message>.+)",
             timestampField: "timestamp");
         var adapter = new LogFileAdapter(config);
@@ -148,7 +148,7 @@ public class LogFileAdapterTests : IDisposable
             "{\"timestamp\":\"2024-01-01T00:01:00Z\",\"message\":\"second\"}"
         );
         var path = CreateTempFile(lines);
-        var config = MakeConfig([path], timestampField: "timestamp");
+        var config = MakeConfig(path, timestampField: "timestamp");
         var adapter = new LogFileAdapter(config);
 
         // First poll reads all
@@ -175,7 +175,7 @@ public class LogFileAdapterTests : IDisposable
             "{\"timestamp\":\"2024-01-01T00:01:00Z\",\"message\":\"original2\"}"
         );
         var path = CreateTempFile(lines);
-        var config = MakeConfig([path], timestampField: "timestamp");
+        var config = MakeConfig(path, timestampField: "timestamp");
         var adapter = new LogFileAdapter(config);
 
         // First poll reads all
@@ -197,7 +197,7 @@ public class LogFileAdapterTests : IDisposable
             "{\"timestamp\":\"2024-01-01\",\"count\":42,\"active\":true,\"message\":\"test\"}"
         );
         var path = CreateTempFile(lines);
-        var config = MakeConfig([path]);
+        var config = MakeConfig(path);
         var adapter = new LogFileAdapter(config);
 
         var schema = await adapter.GetSchemaAsync();

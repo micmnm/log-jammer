@@ -11,7 +11,7 @@ public class LogFileAdapter : IDataSourceAdapter
 {
     private readonly LogFileConnectionConfig _config;
     private readonly Regex? _regex;
-    private readonly Dictionary<string, long> _fileOffsets = new();
+    private long _fileOffset;
 
     public LogFileAdapter(string connectionConfigJson)
     {
@@ -31,26 +31,20 @@ public class LogFileAdapter : IDataSourceAdapter
         var sw = Stopwatch.StartNew();
         try
         {
-            var missing = _config.FilePaths.Where(f => !File.Exists(f)).ToList();
-            sw.Stop();
-
-            if (missing.Count > 0)
+            if (!File.Exists(_config.FilePath))
             {
+                sw.Stop();
                 return Task.FromResult(new ConnectionTestResult(false,
-                    $"Files not found: {string.Join(", ", missing)}",
+                    $"File not found: {_config.FilePath}",
                     sw.Elapsed));
             }
 
-            // Verify readable
-            foreach (var path in _config.FilePaths)
-            {
-                using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            }
+            using var stream = File.Open(_config.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            sw.Stop();
 
             return Task.FromResult(new ConnectionTestResult(true, null, sw.Elapsed,
                 new Dictionary<string, object?>
                 {
-                    ["fileCount"] = _config.FilePaths.Length,
                     ["parseMode"] = _config.ParseMode
                 }));
         }
@@ -63,39 +57,29 @@ public class LogFileAdapter : IDataSourceAdapter
 
     public Task<ErrorBatch> PollErrorsAsync(DateTime since, int limit, CancellationToken cancellationToken = default)
     {
-        var allEntries = new List<RawLogEntry>();
+        if (!File.Exists(_config.FilePath))
+            return Task.FromResult(new ErrorBatch([], 0, 1.0));
 
-        foreach (var filePath in _config.FilePaths)
-        {
-            if (!File.Exists(filePath)) continue;
+        var entries = ReadEntriesFromFile(updateOffset: true);
 
-            var entries = ReadEntriesFromFile(filePath, updateOffset: true);
-            allEntries.AddRange(entries);
-        }
-
-        var filtered = allEntries
+        var filtered = entries
             .Where(e => e.Timestamp >= since)
             .OrderByDescending(e => e.Timestamp)
             .Take(limit)
             .ToList();
 
-        var sampleRatio = allEntries.Count > 0 ? (double)filtered.Count / allEntries.Count : 1.0;
-        return Task.FromResult(new ErrorBatch(filtered, allEntries.Count, sampleRatio));
+        var sampleRatio = entries.Count > 0 ? (double)filtered.Count / entries.Count : 1.0;
+        return Task.FromResult(new ErrorBatch(filtered, entries.Count, sampleRatio));
     }
 
     public Task<IReadOnlyList<RawLogEntry>> GetSampleRecordsAsync(int count, CancellationToken cancellationToken = default)
     {
-        var allEntries = new List<RawLogEntry>();
+        if (!File.Exists(_config.FilePath))
+            return Task.FromResult<IReadOnlyList<RawLogEntry>>([]);
 
-        foreach (var filePath in _config.FilePaths)
-        {
-            if (!File.Exists(filePath)) continue;
+        var entries = ReadEntriesFromFile(updateOffset: false);
 
-            var entries = ReadEntriesFromFile(filePath, updateOffset: false);
-            allEntries.AddRange(entries);
-        }
-
-        IReadOnlyList<RawLogEntry> result = allEntries
+        IReadOnlyList<RawLogEntry> result = entries
             .OrderByDescending(e => e.Timestamp)
             .Take(count)
             .ToList();
@@ -107,34 +91,31 @@ public class LogFileAdapter : IDataSourceAdapter
     {
         var fieldNames = new Dictionary<string, string>();
 
-        foreach (var filePath in _config.FilePaths)
+        if (!File.Exists(_config.FilePath))
+            return Task.FromResult<IReadOnlyList<FieldDefinition>>([]);
+
+        var lines = File.ReadLines(_config.FilePath).Take(100);
+        foreach (var line in lines)
         {
-            if (!File.Exists(filePath)) continue;
+            var fields = ParseLine(line);
+            if (fields is null) continue;
 
-            // Read a sample of lines to infer schema
-            var lines = File.ReadLines(filePath).Take(100);
-            foreach (var line in lines)
+            foreach (var (key, value) in fields)
             {
-                var fields = ParseLine(line);
-                if (fields is null) continue;
-
-                foreach (var (key, value) in fields)
+                if (!fieldNames.ContainsKey(key))
                 {
-                    if (!fieldNames.ContainsKey(key))
+                    fieldNames[key] = value switch
                     {
-                        fieldNames[key] = value switch
+                        JsonElement el => el.ValueKind switch
                         {
-                            JsonElement el => el.ValueKind switch
-                            {
-                                JsonValueKind.Number => "number",
-                                JsonValueKind.True or JsonValueKind.False => "boolean",
-                                JsonValueKind.Array => "array",
-                                JsonValueKind.Object => "object",
-                                _ => "string"
-                            },
+                            JsonValueKind.Number => "number",
+                            JsonValueKind.True or JsonValueKind.False => "boolean",
+                            JsonValueKind.Array => "array",
+                            JsonValueKind.Object => "object",
                             _ => "string"
-                        };
-                    }
+                        },
+                        _ => "string"
+                    };
                 }
             }
         }
@@ -147,22 +128,18 @@ public class LogFileAdapter : IDataSourceAdapter
         return Task.FromResult(result);
     }
 
-    private List<RawLogEntry> ReadEntriesFromFile(string filePath, bool updateOffset)
+    private List<RawLogEntry> ReadEntriesFromFile(bool updateOffset)
     {
         var entries = new List<RawLogEntry>();
 
-        using var stream = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var stream = File.Open(_config.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 
         // Handle file rotation: if file is shorter than stored offset, reset
-        if (_fileOffsets.TryGetValue(filePath, out var offset) && stream.Length < offset)
-        {
-            offset = 0;
-        }
+        if (stream.Length < _fileOffset)
+            _fileOffset = 0;
 
-        if (updateOffset && offset > 0)
-        {
-            stream.Seek(offset, SeekOrigin.Begin);
-        }
+        if (updateOffset && _fileOffset > 0)
+            stream.Seek(_fileOffset, SeekOrigin.Begin);
 
         using var reader = new StreamReader(stream);
         string? line;
@@ -178,9 +155,7 @@ public class LogFileAdapter : IDataSourceAdapter
         }
 
         if (updateOffset)
-        {
-            _fileOffsets[filePath] = stream.Position;
-        }
+            _fileOffset = stream.Position;
 
         return entries;
     }

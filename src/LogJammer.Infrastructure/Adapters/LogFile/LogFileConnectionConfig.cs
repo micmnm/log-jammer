@@ -4,8 +4,8 @@ namespace LogJammer.Infrastructure.Adapters.LogFile;
 
 public record LogFileConnectionConfig
 {
-    [JsonPropertyName("filePaths")]
-    public required string[] FilePaths { get; init; }
+    [JsonPropertyName("filePath")]
+    public required string FilePath { get; init; }
 
     [JsonPropertyName("parseMode")]
     public string ParseMode { get; init; } = "jsonlines"; // "jsonlines" or "regex"
@@ -18,4 +18,10 @@ public record LogFileConnectionConfig
 
     [JsonPropertyName("timestampFormat")]
     public string? TimestampFormat { get; init; }
+
+    [JsonPropertyName("levelField")]
+    public string? LevelField { get; init; }
+
+    [JsonPropertyName("messageField")]
+    public string? MessageField { get; init; }
 }
