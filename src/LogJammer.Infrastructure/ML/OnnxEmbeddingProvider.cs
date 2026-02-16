@@ -1,10 +1,26 @@
+using System.Reflection;
 using BERTTokenizers;
+using BERTTokenizers.Base;
 using LogJammer.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace LogJammer.Infrastructure.ML;
+
+/// <summary>
+/// BertUncasedBaseTokenizer hardcodes "./Vocabularies/base_uncased.txt" relative to CWD.
+/// This wrapper resolves the path relative to the assembly location instead.
+/// </summary>
+internal sealed class AssemblyRelativeUncasedTokenizer : UncasedTokenizer
+{
+    public AssemblyRelativeUncasedTokenizer()
+        : base(Path.Combine(
+            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!,
+            "Vocabularies",
+            "base_uncased.txt"))
+    { }
+}
 
 public class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
 {
@@ -13,7 +29,7 @@ public class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     private InferenceSession? _session;
-    private BertUncasedBaseTokenizer? _tokenizer;
+    private AssemblyRelativeUncasedTokenizer? _tokenizer;
     private bool _initialized;
     private bool _disposed;
 
@@ -62,7 +78,7 @@ public class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
             _logger.LogInformation("Loading ONNX model from {Path}", _downloader.ModelPath);
             var sessionOptions = new SessionOptions();
             _session = new InferenceSession(_downloader.ModelPath, sessionOptions);
-            _tokenizer = new BertUncasedBaseTokenizer();
+            _tokenizer = new AssemblyRelativeUncasedTokenizer();
             _initialized = true;
             _logger.LogInformation("ONNX model loaded successfully");
         }
