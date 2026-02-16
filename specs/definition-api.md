@@ -21,6 +21,11 @@ Base URL: `http://localhost:5000`
 | POST | `/api/datasources/{id}/test` | Test data source connection | Implemented |
 | GET | `/api/datasources/{id}/schema` | Get data source schema | Implemented |
 | GET | `/api/datasources/{id}/sample` | Get sample records (query: count) | Implemented |
+| POST | `/api/datasources/detect` | Auto-detect log file format and propose config | Implemented |
+
+**POST /api/datasources/detect**: Accepts `{ filePath: string }`. Reads up to 200 lines, detects JSON vs text format (>80% JSON parse threshold), infers timestamp/level/message field roles, returns proposed connection config. Path validated against allowed directories. Status codes: 200, 400 (empty file), 403 (path not allowed), 404 (file not found).
+
+**LogFile connectionConfig format**: Uses singular `filePath` (not array). Includes `parseMode`, `timestampField`, `levelField`, `messageField`, `regexPattern` (when parseMode=regex).
 
 ## Error Groups
 

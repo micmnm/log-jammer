@@ -416,6 +416,45 @@
 - `TagName` → `string`
 - `Confidence` → `double`
 
+### LogFileConnectionConfig
+`LogJammer.Infrastructure.Adapters.LogFile.LogFileConnectionConfig`
+- `FilePath` → `string` (required, singular file path)
+- `ParseMode` → `string` (default: "jsonlines"; options: "jsonlines", "regex")
+- `RegexPattern` → `string?`
+- `TimestampField` → `string?`
+- `TimestampFormat` → `string?`
+- `LevelField` → `string?`
+- `MessageField` → `string?`
+
+### DetectResult
+`LogJammer.Core.Interfaces.DetectResult`
+- `DetectedFormat` → `string` ("jsonlines" or "text")
+- `Fields` → `IReadOnlyList<DetectedField>`
+- `SampleRecords` → `IReadOnlyList<Dictionary<string, object?>>`
+- `ProposedConfig` → `DetectedConfig`
+
+### DetectedField
+`LogJammer.Core.Interfaces.DetectedField`
+- `Name` → `string`
+- `Type` → `string`
+- `ProposedRole` → `string?` ("Timestamp", "Level", "Message", or null)
+
+### DetectedConfig
+`LogJammer.Core.Interfaces.DetectedConfig`
+- `FilePath` → `string`
+- `ParseMode` → `string`
+- `TimestampField` → `string?`
+- `LevelField` → `string?`
+- `MessageField` → `string?`
+- `RegexPattern` → `string?`
+
+### DetectRequest / DetectResponse (DTOs)
+`LogJammer.Api.Dtos.DetectDtos`
+- `DetectRequest`: `FilePath` (required)
+- `DetectResponse`: `DetectedFormat`, `Fields` → `DetectedFieldDto[]`, `SampleRecords`, `ProposedConfig` → `DetectedConfigDto`
+- `DetectedFieldDto`: `Name`, `Type`, `ProposedRole`
+- `DetectedConfigDto`: `FilePath`, `ParseMode`, `TimestampField`, `LevelField`, `MessageField`, `RegexPattern`
+
 ---
 
 ## Frontend (TypeScript)
