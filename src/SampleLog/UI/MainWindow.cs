@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using SampleLog.Generation;
 using SampleLog.Generation.Scenarios;
 using SampleLog.Models;
@@ -11,6 +12,7 @@ public sealed class MainWindow : Toplevel
     private readonly LogGenerator _generator;
     private readonly ScenarioRunner _runner;
     private readonly DefaultsConfig _defaults;
+    private readonly LogJammerApiConfig _apiConfig;
 
     private readonly TextView _logView;
     private readonly Label _statusLabel;
@@ -29,11 +31,12 @@ public sealed class MainWindow : Toplevel
     private object? _statusTimerToken;
     private object? _logFlushTimerToken;
 
-    public MainWindow(LogGenerator generator, ScenarioRunner runner, DefaultsConfig defaults)
+    public MainWindow(LogGenerator generator, ScenarioRunner runner, DefaultsConfig defaults, LogJammerApiConfig apiConfig)
     {
         _generator = generator;
         _runner = runner;
         _defaults = defaults;
+        _apiConfig = apiConfig;
 
         // Use terminal-native colors (white on black)
         var attr = new Terminal.Gui.Attribute(Color.White, Color.Black);
@@ -83,7 +86,7 @@ public sealed class MainWindow : Toplevel
         var row2 = new Label { Text = "  [2] Spike burst         [6] Volume/load test", X = 0, Y = 3, Width = Dim.Fill() };
         var row3 = new Label { Text = "  [3] Gradual degradation [7] Stop all", X = 0, Y = 4, Width = Dim.Fill() };
         var row4 = new Label { Text = "  [4] Correlated failures [C] Copy log path", X = 0, Y = 5, Width = Dim.Fill() };
-        var row5 = new Label { Text = "  [Q] Quit", X = 0, Y = 6, Width = Dim.Fill() };
+        var row5 = new Label { Text = "  [R] Register with LogJammer  [Q] Quit", X = 0, Y = 6, Width = Dim.Fill() };
         var sep2 = new Label { Text = new string('=', 120), X = 0, Y = 7, Width = Dim.Fill() };
 
         menuView.Add(logPathLabel, sep, row1, row2, row3, row4, row5, sep2);
@@ -127,6 +130,10 @@ public sealed class MainWindow : Toplevel
                 return true;
             case KeyCode.D7:
                 StopAllScenarios();
+                return true;
+            case KeyCode.R:
+            case KeyCode.R | KeyCode.ShiftMask:
+                ShowRegisterDialog();
                 return true;
             case KeyCode.C:
             case KeyCode.C | KeyCode.ShiftMask:
@@ -563,6 +570,115 @@ public sealed class MainWindow : Toplevel
         dialog.AddButton(cancelButton);
         Application.Run(dialog);
         dialog.Dispose();
+    }
+
+    private void ShowRegisterDialog()
+    {
+        var dialog = new Dialog
+        {
+            Title = "Register with LogJammer",
+            Width = 50,
+            Height = 10
+        };
+
+        var label = new Label { Text = "Register which log file?", X = 1, Y = 1 };
+        var jsonBtn = new Button { Text = "[1] JSON", X = 1, Y = 3 };
+        var textBtn = new Button { Text = "[2] Text", X = 14, Y = 3 };
+        var bothBtn = new Button { Text = "[3] Both", X = 27, Y = 3 };
+        var cancelBtn = new Button { Text = "Cancel" };
+
+        string? choice = null;
+        jsonBtn.Accepting += (s, e) => { e.Cancel = true; choice = "json"; Application.RequestStop(); };
+        textBtn.Accepting += (s, e) => { e.Cancel = true; choice = "text"; Application.RequestStop(); };
+        bothBtn.Accepting += (s, e) => { e.Cancel = true; choice = "both"; Application.RequestStop(); };
+        cancelBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); };
+
+        dialog.Add(label, jsonBtn, textBtn, bothBtn);
+        dialog.AddButton(cancelBtn);
+        Application.Run(dialog);
+        dialog.Dispose();
+
+        if (choice is not null)
+            RegisterAsync(choice);
+    }
+
+    private async void RegisterAsync(string mode)
+    {
+        var filesToRegister = new List<(string path, string name)>();
+
+        if (mode is "json" or "both")
+            filesToRegister.Add((_generator.JsonFilePath, "SampleLog JSON"));
+        if (mode is "text" or "both")
+            filesToRegister.Add((_generator.TextFilePath, "SampleLog Text"));
+
+        using var http = new HttpClient { BaseAddress = new Uri(_apiConfig.BaseUrl) };
+
+        foreach (var (path, name) in filesToRegister)
+        {
+            try
+            {
+                // Step 1: Detect
+                var detectPayload = JsonSerializer.Serialize(new { filePath = path });
+                var detectResponse = await http.PostAsync("/api/datasources/detect",
+                    new StringContent(detectPayload, System.Text.Encoding.UTF8, "application/json"));
+
+                if (!detectResponse.IsSuccessStatusCode)
+                {
+                    var err = await detectResponse.Content.ReadAsStringAsync();
+                    AddStatusLine($"ERR  [register] Detect failed for {name}: {err}");
+                    continue;
+                }
+
+                var detectResult = await JsonSerializer.DeserializeAsync<JsonElement>(
+                    await detectResponse.Content.ReadAsStreamAsync());
+
+                var proposedConfig = detectResult.GetProperty("proposedConfig");
+
+                // Step 2: Create data source
+                var connectionConfig = JsonSerializer.Serialize(new
+                {
+                    filePath = path,
+                    parseMode = proposedConfig.GetProperty("parseMode").GetString(),
+                    timestampField = proposedConfig.GetProperty("timestampField").GetString(),
+                    levelField = proposedConfig.GetProperty("levelField").GetString(),
+                    messageField = proposedConfig.GetProperty("messageField").GetString(),
+                    regexPattern = proposedConfig.TryGetProperty("regexPattern", out var rp) ? rp.GetString() : null
+                });
+
+                var createPayload = JsonSerializer.Serialize(new
+                {
+                    name,
+                    adapterType = "LogFile",
+                    connectionConfig,
+                    pollIntervalSeconds = 30,
+                    enabled = true
+                });
+
+                var createResponse = await http.PostAsync("/api/datasources",
+                    new StringContent(createPayload, System.Text.Encoding.UTF8, "application/json"));
+
+                if (createResponse.IsSuccessStatusCode)
+                    AddStatusLine($"INF  [register] {name} registered successfully");
+                else
+                {
+                    var err = await createResponse.Content.ReadAsStringAsync();
+                    AddStatusLine($"ERR  [register] Create failed for {name}: {err}");
+                }
+            }
+            catch (Exception ex)
+            {
+                AddStatusLine($"ERR  [register] {ex.Message}");
+            }
+        }
+    }
+
+    private void AddStatusLine(string message)
+    {
+        Application.Invoke(() =>
+        {
+            _pendingLines.Add($"{DateTime.Now:HH:mm:ss} {message}");
+            _logDirty = true;
+        });
     }
 
     protected override void Dispose(bool disposing)
