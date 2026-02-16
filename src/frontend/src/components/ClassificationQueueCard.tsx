@@ -66,7 +66,21 @@ export default function ClassificationQueueCard({ item }: ClassificationQueueCar
 
   return (
     <>
-      <Card variant="outlined" sx={{ mb: 2 }}>
+      <Card
+        variant="outlined"
+        sx={{
+          mb: 2,
+          borderLeft: `3px solid ${
+            item.confidence == null
+              ? 'rgba(255,255,255,0.1)'
+              : item.confidence >= 0.7
+                ? '#00e676'
+                : item.confidence >= 0.4
+                  ? '#ffb300'
+                  : '#ff1744'
+          }`,
+        }}
+      >
         <CardContent>
           <Typography
             variant="body1"
