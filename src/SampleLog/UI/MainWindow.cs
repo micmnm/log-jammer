@@ -75,7 +75,7 @@ public sealed class MainWindow : Toplevel
 
         var logPathLabel = new Label
         {
-            Text = $"  Log: {_generator.LogFilePath}",
+            Text = $"  Log: {_generator.JsonFilePath}",
             X = 0, Y = 0, Width = Dim.Fill()
         };
         var sep = new Label { Text = new string('=', 120), X = 0, Y = 1, Width = Dim.Fill() };
@@ -130,7 +130,7 @@ public sealed class MainWindow : Toplevel
                 return true;
             case KeyCode.C:
             case KeyCode.C | KeyCode.ShiftMask:
-                Clipboard.TrySetClipboardData(_generator.LogFilePath);
+                Clipboard.TrySetClipboardData(_generator.JsonFilePath);
                 _pendingLines.Add($"{DateTime.Now:HH:mm:ss} INF  [ui] Log path copied to clipboard");
                 _logDirty = true;
                 return true;

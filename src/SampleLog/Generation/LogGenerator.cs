@@ -1,8 +1,5 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Serilog;
-using Serilog.Events;
-using Serilog.Formatting.Compact;
 using SampleLog.Models;
 
 namespace SampleLog.Generation;
@@ -10,36 +7,26 @@ namespace SampleLog.Generation;
 public sealed class LogGenerator : IDisposable
 {
     private readonly LogLibrary _library;
-    private readonly Serilog.ILogger _fileLogger;
-    private readonly StreamWriter _rawWriter;
+    private readonly StreamWriter _jsonWriter;
+    private readonly StreamWriter _textWriter;
     private long _emittedCount;
 
     public long EmittedCount => Interlocked.Read(ref _emittedCount);
     public event Action<string>? OnLogEmitted;
     public LogLibrary Library => _library;
-    public string LogFilePath { get; }
-    public string RawFilePath { get; }
+    public string JsonFilePath { get; }
+    public string TextFilePath { get; }
 
     public LogGenerator(LogLibrary library, OutputConfig outputConfig)
     {
         _library = library;
 
-        LogFilePath = Path.GetFullPath(Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}.txt"));
-        RawFilePath = Path.GetFullPath(Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}-raw.txt"));
-        Directory.CreateDirectory(outputConfig.Directory);
+        JsonFilePath = Path.GetFullPath(Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}.json"));
+        TextFilePath = Path.GetFullPath(Path.Combine(outputConfig.Directory, $"{outputConfig.FilePrefix}.log"));
+        Directory.CreateDirectory(Path.GetDirectoryName(JsonFilePath)!);
 
-        _fileLogger = new LoggerConfiguration()
-            .MinimumLevel.Verbose()
-            .WriteTo.File(
-                new CompactJsonFormatter(),
-                LogFilePath,
-                rollingInterval: RollingInterval.Infinite,
-                rollOnFileSizeLimit: true,
-                fileSizeLimitBytes: outputConfig.RollingSizeMB * 1024L * 1024L,
-                retainedFileCountLimit: outputConfig.MaxFiles)
-            .CreateLogger();
-
-        _rawWriter = new StreamWriter(RawFilePath, append: true) { AutoFlush = true };
+        _jsonWriter = new StreamWriter(JsonFilePath, append: true) { AutoFlush = true };
+        _textWriter = new StreamWriter(TextFilePath, append: true) { AutoFlush = true };
     }
 
     public void EmitRandom()
@@ -72,9 +59,21 @@ public sealed class LogGenerator : IDisposable
         var entry = _library.Prebaked.FirstOrDefault(p => p.Id == id)
             ?? throw new KeyNotFoundException($"Prebaked entry '{id}' not found in library.");
 
-        var raw = entry.Raw.Replace("{{timestamp}}", DateTime.UtcNow.ToString("O"));
+        var now = DateTime.UtcNow;
+        var message = entry.Raw.Replace("{{timestamp}}", now.ToString("O"));
 
-        _rawWriter.WriteLine(raw);
+        // Write ELK JSON
+        var jsonObj = new Dictionary<string, object?>
+        {
+            ["timestamp"] = now.ToString("O"),
+            ["level"] = entry.Level.ToUpperInvariant(),
+            ["message"] = message,
+            ["source"] = "prebaked"
+        };
+        _jsonWriter.WriteLine(JsonSerializer.Serialize(jsonObj));
+
+        // Write simple text
+        _textWriter.WriteLine($"{now:yyyy-MM-dd HH:mm:ss.fff} {FormatLevelShort(entry.Level),-5} {message}");
 
         var displayLine = $"{DateTime.Now:HH:mm:ss} {FormatLevelShort(entry.Level),-4} [prebaked] {entry.Id}";
         OnLogEmitted?.Invoke(displayLine);
@@ -84,8 +83,8 @@ public sealed class LogGenerator : IDisposable
 
     public void Dispose()
     {
-        _rawWriter.Dispose();
-        (_fileLogger as IDisposable)?.Dispose();
+        _jsonWriter.Dispose();
+        _textWriter.Dispose();
     }
 
     private void EmitTemplateInternal(LogTemplate template)
@@ -101,31 +100,34 @@ public sealed class LogGenerator : IDisposable
             }
         }
 
-        var level = Enum.Parse<LogEventLevel>(template.Level, ignoreCase: true);
+        var renderedMessage = RenderMessageTemplate(template.MessageTemplate, resolvedProperties);
+        var now = DateTime.UtcNow;
+        var level = template.Level.ToUpperInvariant();
 
-        var logger = _fileLogger;
+        // Build ELK JSON object
+        var jsonObj = new Dictionary<string, object?>
+        {
+            ["timestamp"] = now.ToString("O"),
+            ["level"] = level,
+            ["message"] = renderedMessage
+        };
 
         if (!string.IsNullOrEmpty(template.SourceContext))
-        {
-            logger = logger.ForContext("SourceContext", template.SourceContext);
-        }
+            jsonObj["service"] = template.SourceContext;
 
         foreach (var (propName, propValue) in resolvedProperties)
-        {
-            logger = logger.ForContext(propName, propValue);
-        }
+            jsonObj[propName] = propValue;
 
         if (!string.IsNullOrEmpty(template.Exception))
-        {
-            logger.Write(level, new RenderedMessageException(template.Exception), template.MessageTemplate);
-        }
-        else
-        {
-            logger.Write(level, template.MessageTemplate);
-        }
+            jsonObj["exception"] = template.Exception;
+
+        _jsonWriter.WriteLine(JsonSerializer.Serialize(jsonObj));
+
+        // Write simple text
+        var levelShort = FormatLevelShort(template.Level);
+        _textWriter.WriteLine($"{now:yyyy-MM-dd HH:mm:ss.fff} {levelShort,-5} {renderedMessage}");
 
         // Fire the display event
-        var renderedMessage = RenderMessageTemplate(template.MessageTemplate, resolvedProperties);
         var displayLine = $"{DateTime.Now:HH:mm:ss} {FormatLevelShort(template.Level),-4} {renderedMessage}";
         OnLogEmitted?.Invoke(displayLine);
 
@@ -173,13 +175,5 @@ public sealed class LogGenerator : IDisposable
             "FATAL" => "FTL",
             _ => level[..Math.Min(3, level.Length)].ToUpperInvariant()
         };
-    }
-
-    /// <summary>
-    /// Wrapper to pass exception text to Serilog's Write method.
-    /// </summary>
-    private sealed class RenderedMessageException(string message) : Exception(message)
-    {
-        public override string ToString() => Message;
     }
 }

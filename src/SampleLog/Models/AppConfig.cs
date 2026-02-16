@@ -18,3 +18,8 @@ public sealed class DefaultsConfig
     public int SpikeDurationSeconds { get; set; } = 10;
     public int DegradationDurationSeconds { get; set; } = 120;
 }
+
+public sealed class LogJammerApiConfig
+{
+    public string BaseUrl { get; set; } = "http://localhost:5050";
+}
