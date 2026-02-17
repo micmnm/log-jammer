@@ -24,14 +24,17 @@ import {
   Chip,
   CircularProgress,
 } from '@mui/material';
-import type { DataSourceResponse, AdapterType, DetectResponse } from '../api/types';
-import { useCreateDataSource, useUpdateDataSource, useTestConnection, useDetectLogFile } from '../api/hooks/useDataSources';
+import type { DataSourceResponse, AdapterType, DetectResponse, DiscoverIndicesResponse, SchemaResponse } from '../api/types';
+import { useCreateDataSource, useUpdateDataSource, useTestConnection, useDetectLogFile, useDiscoverIndices, useDiscoverSchema } from '../api/hooks/useDataSources';
 
 interface ElasticsearchConfig {
   url: string;
   indexPattern: string;
-  username: string;
-  password: string;
+  auth?: {
+    type: string;
+    username?: string;
+    password?: string;
+  };
 }
 
 interface PostgreSqlConfig {
@@ -55,7 +58,7 @@ interface Props {
   dataSource: DataSourceResponse | null;
 }
 
-function parseConfig(configJson: string | undefined): Record<string, string> {
+function parseConfig(configJson: string | undefined): Record<string, unknown> {
   if (!configJson) return {};
   try {
     return JSON.parse(configJson);
@@ -69,6 +72,8 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
   const updateDataSource = useUpdateDataSource();
   const testConnection = useTestConnection();
   const detectLogFile = useDetectLogFile();
+  const discoverIndices = useDiscoverIndices();
+  const discoverSchema = useDiscoverSchema();
 
   const isEdit = !!dataSource;
 
@@ -99,6 +104,12 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
   const [lfDetected, setLfDetected] = useState(false);
   const [lfDetectResult, setLfDetectResult] = useState<DetectResponse | null>(null);
 
+  // ES discovery state
+  const [discoveredIndices, setDiscoveredIndices] = useState<DiscoverIndicesResponse | null>(null);
+  const [showConcreteIndices, setShowConcreteIndices] = useState(false);
+  const [discoveredSchema, setDiscoveredSchema] = useState<SchemaResponse | null>(null);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
+
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [detectError, setDetectError] = useState<string | null>(null);
 
@@ -113,21 +124,22 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
 
         const config = parseConfig(dataSource.connectionConfig);
         if (dataSource.adapterType === 'Elasticsearch') {
-          setEsUrl(config.url ?? '');
-          setEsIndexPattern(config.indexPattern ?? '');
-          setEsUsername(config.username ?? '');
-          setEsPassword(config.password ?? '');
+          setEsUrl(String(config.url ?? ''));
+          setEsIndexPattern(String(config.indexPattern ?? ''));
+          const auth = config.auth as { username?: string; password?: string } | undefined;
+          setEsUsername(auth?.username ?? '');
+          setEsPassword(auth?.password ?? '');
         } else if (dataSource.adapterType === 'PostgreSql') {
-          setPgConnectionString(config.connectionString ?? '');
-          setPgTable(config.table ?? '');
-          setPgTimestampColumn(config.timestampColumn ?? '');
+          setPgConnectionString(String(config.connectionString ?? ''));
+          setPgTable(String(config.table ?? ''));
+          setPgTimestampColumn(String(config.timestampColumn ?? ''));
         } else if (dataSource.adapterType === 'LogFile') {
-          setLfFilePath(config.filePath ?? '');
-          setLfParseMode(config.parseMode ?? '');
-          setLfTimestampField(config.timestampField ?? '');
-          setLfLevelField(config.levelField ?? '');
-          setLfMessageField(config.messageField ?? '');
-          setLfRegexPattern(config.regexPattern ?? '');
+          setLfFilePath(String(config.filePath ?? ''));
+          setLfParseMode(String(config.parseMode ?? ''));
+          setLfTimestampField(String(config.timestampField ?? ''));
+          setLfLevelField(String(config.levelField ?? ''));
+          setLfMessageField(String(config.messageField ?? ''));
+          setLfRegexPattern(String(config.regexPattern ?? ''));
           setLfDetected(true); // existing data source already has config
         }
       } else {
@@ -154,12 +166,20 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
       }
       setTestResult(null);
       setDetectError(null);
+      setDiscoveredIndices(null);
+      setDiscoveredSchema(null);
+      setDiscoverError(null);
+      setShowConcreteIndices(false);
     }
   }, [open, dataSource]);
 
   const buildConnectionConfig = (): string => {
     if (adapterType === 'Elasticsearch') {
-      return JSON.stringify({ url: esUrl, indexPattern: esIndexPattern, username: esUsername, password: esPassword } satisfies ElasticsearchConfig);
+      const config: ElasticsearchConfig = { url: esUrl, indexPattern: esIndexPattern };
+      if (esUsername || esPassword) {
+        config.auth = { type: 'basic', username: esUsername, password: esPassword };
+      }
+      return JSON.stringify(config);
     } else if (adapterType === 'PostgreSql') {
       return JSON.stringify({ connectionString: pgConnectionString, table: pgTable, timestampColumn: pgTimestampColumn } satisfies PostgreSqlConfig);
     } else {
@@ -215,6 +235,40 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
     });
   };
 
+  const buildEsConnectionConfig = (indexPattern?: string): string => {
+    const config: ElasticsearchConfig = { url: esUrl, indexPattern: indexPattern ?? esIndexPattern };
+    if (esUsername || esPassword) {
+      config.auth = { type: 'basic', username: esUsername, password: esPassword };
+    }
+    return JSON.stringify(config);
+  };
+
+  const handleDiscoverIndices = () => {
+    if (!esUrl) return;
+    setDiscoverError(null);
+    setDiscoveredIndices(null);
+    discoverIndices.mutate(
+      { connectionConfig: buildEsConnectionConfig('*'), showConcreteIndices: showConcreteIndices },
+      {
+        onSuccess: (result) => setDiscoveredIndices(result),
+        onError: (err) => setDiscoverError(String(err)),
+      },
+    );
+  };
+
+  const handleDiscoverSchema = () => {
+    if (!esIndexPattern) return;
+    setDiscoverError(null);
+    setDiscoveredSchema(null);
+    discoverSchema.mutate(
+      { connectionConfig: buildEsConnectionConfig() },
+      {
+        onSuccess: (result) => setDiscoveredSchema(result),
+        onError: (err) => setDiscoverError(String(err)),
+      },
+    );
+  };
+
   const handleDetect = () => {
     if (!lfFilePath) return;
     setDetectError(null);
@@ -268,10 +322,120 @@ export default function DataSourceDialog({ open, onClose, dataSource }: Props) {
         {/* Adapter-specific sections */}
         {adapterType === 'Elasticsearch' && (
           <Box sx={{ mt: 2 }}>
-            <TextField label="URL" value={esUrl} onChange={(e) => setEsUrl(e.target.value)} fullWidth margin="dense" />
-            <TextField label="Index Pattern" value={esIndexPattern} onChange={(e) => setEsIndexPattern(e.target.value)} fullWidth margin="dense" />
+            <TextField label="URL" value={esUrl} onChange={(e) => { setEsUrl(e.target.value); setDiscoveredIndices(null); setDiscoveredSchema(null); setDiscoverError(null); }} fullWidth margin="dense" />
+            <TextField label="Index Pattern" value={esIndexPattern} onChange={(e) => { setEsIndexPattern(e.target.value); setDiscoveredSchema(null); }} fullWidth margin="dense" />
             <TextField label="Username" value={esUsername} onChange={(e) => setEsUsername(e.target.value)} fullWidth margin="dense" />
             <TextField label="Password" type="password" value={esPassword} onChange={(e) => setEsPassword(e.target.value)} fullWidth margin="dense" />
+
+            {/* Discover Indices */}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1 }}>
+              <Button
+                variant="outlined"
+                onClick={handleDiscoverIndices}
+                disabled={!esUrl || discoverIndices.isPending}
+                sx={{ minWidth: 150 }}
+              >
+                {discoverIndices.isPending ? <CircularProgress size={20} /> : 'Discover Indices'}
+              </Button>
+              <FormControlLabel
+                control={<Switch size="small" checked={showConcreteIndices} onChange={(e) => setShowConcreteIndices(e.target.checked)} />}
+                label="Show concrete indices"
+                slotProps={{ typography: { variant: 'body2' } }}
+              />
+            </Box>
+
+            {discoverError && (
+              <Alert severity="error" sx={{ mt: 1 }}>{discoverError}</Alert>
+            )}
+
+            {discoveredIndices && (
+              <Box sx={{ mt: 1 }}>
+                {discoveredIndices.aliases.length > 0 && (
+                  <Box sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom>Aliases</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {discoveredIndices.aliases.map((a) => (
+                        <Chip
+                          key={a.name}
+                          label={`${a.name} (${a.indices.length})`}
+                          size="small"
+                          color={esIndexPattern === a.name ? 'primary' : 'default'}
+                          variant={esIndexPattern === a.name ? 'filled' : 'outlined'}
+                          onClick={() => setEsIndexPattern(a.name)}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+                {discoveredIndices.dataStreams.length > 0 && (
+                  <Box sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom>Data Streams</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {discoveredIndices.dataStreams.map((ds) => (
+                        <Chip
+                          key={ds.name}
+                          label={`${ds.name} (${ds.backingIndices})`}
+                          size="small"
+                          color={esIndexPattern === ds.name ? 'primary' : 'default'}
+                          variant={esIndexPattern === ds.name ? 'filled' : 'outlined'}
+                          onClick={() => setEsIndexPattern(ds.name)}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+                {showConcreteIndices && discoveredIndices.concreteIndices.length > 0 && (
+                  <Box sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom>Concrete Indices</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {discoveredIndices.concreteIndices.map((idx) => (
+                        <Chip
+                          key={idx}
+                          label={idx}
+                          size="small"
+                          color={esIndexPattern === idx ? 'primary' : 'default'}
+                          variant={esIndexPattern === idx ? 'filled' : 'outlined'}
+                          onClick={() => setEsIndexPattern(idx)}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+                {discoveredIndices.aliases.length === 0 && discoveredIndices.dataStreams.length === 0 && discoveredIndices.concreteIndices.length === 0 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No indices found.</Typography>
+                )}
+              </Box>
+            )}
+
+            {/* View Schema */}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1 }}>
+              <Button
+                variant="outlined"
+                onClick={handleDiscoverSchema}
+                disabled={!esIndexPattern || discoverSchema.isPending}
+                sx={{ minWidth: 130 }}
+              >
+                {discoverSchema.isPending ? <CircularProgress size={20} /> : 'View Schema'}
+              </Button>
+            </Box>
+
+            {discoveredSchema && discoveredSchema.fields.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Fields ({discoveredSchema.fields.length})
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {discoveredSchema.fields.map((f) => (
+                    <Chip
+                      key={f.name}
+                      label={`${f.name}: ${f.type}`}
+                      size="small"
+                      variant="outlined"
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
           </Box>
         )}
 
