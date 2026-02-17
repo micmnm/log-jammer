@@ -92,6 +92,46 @@ public class DataSourcesController(
         return Ok(records);
     }
 
+    [HttpPost("discover/indices")]
+    public async Task<ActionResult<DiscoverIndicesResponse>> DiscoverIndices(
+        [FromBody] DiscoverIndicesRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await dataSourceService.DiscoverIndicesAsync(request, cancellationToken);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 400);
+        }
+        catch (Exception ex)
+        {
+            return Problem(detail: $"Discovery failed: {ex.Message}", statusCode: 502);
+        }
+    }
+
+    [HttpPost("discover/schema")]
+    public async Task<ActionResult<SchemaResponse>> DiscoverSchema(
+        [FromBody] DiscoverSchemaRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await dataSourceService.DiscoverSchemaAsync(request, cancellationToken);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 400);
+        }
+        catch (Exception ex)
+        {
+            return Problem(detail: $"Schema discovery failed: {ex.Message}", statusCode: 502);
+        }
+    }
+
     [HttpPost("detect")]
     public async Task<ActionResult<DetectResponse>> Detect(
         [FromBody] DetectRequest request,
