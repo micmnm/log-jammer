@@ -267,3 +267,28 @@ export interface DetectResponse {
   sampleRecords: Record<string, unknown>[];
   proposedConfig: DetectedConfigDto;
 }
+
+export interface DiscoverIndicesRequest {
+  connectionConfig: string;
+  showConcreteIndices?: boolean;
+}
+
+export interface DiscoverSchemaRequest {
+  connectionConfig: string;
+}
+
+export interface AliasInfo {
+  name: string;
+  indices: string[];
+}
+
+export interface DataStreamInfo {
+  name: string;
+  backingIndices: number;
+}
+
+export interface DiscoverIndicesResponse {
+  aliases: AliasInfo[];
+  dataStreams: DataStreamInfo[];
+  concreteIndices: string[];
+}

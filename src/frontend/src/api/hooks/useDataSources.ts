@@ -9,6 +9,9 @@ import type {
   SampleRecordsResponse,
   DetectResponse,
   DeletionImpactResponse,
+  DiscoverIndicesRequest,
+  DiscoverIndicesResponse,
+  DiscoverSchemaRequest,
 } from '../types';
 
 export function useDataSources() {
@@ -94,5 +97,19 @@ export function useDetectLogFile() {
   return useMutation({
     mutationFn: (filePath: string) =>
       api.post<DetectResponse>('/datasources/detect', { filePath }),
+  });
+}
+
+export function useDiscoverIndices() {
+  return useMutation({
+    mutationFn: (request: DiscoverIndicesRequest) =>
+      api.post<DiscoverIndicesResponse>('/datasources/discover/indices', request),
+  });
+}
+
+export function useDiscoverSchema() {
+  return useMutation({
+    mutationFn: (request: DiscoverSchemaRequest) =>
+      api.post<SchemaResponse>('/datasources/discover/schema', request),
   });
 }
