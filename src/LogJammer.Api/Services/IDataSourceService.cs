@@ -13,4 +13,6 @@ public interface IDataSourceService
     Task<ConnectionTestResponse?> TestConnectionAsync(Guid id, CancellationToken cancellationToken = default);
     Task<SchemaResponse?> GetSchemaAsync(Guid id, CancellationToken cancellationToken = default);
     Task<SampleRecordsResponse?> GetSampleRecordsAsync(Guid id, int count, CancellationToken cancellationToken = default);
+    Task<DiscoverIndicesResponse> DiscoverIndicesAsync(DiscoverIndicesRequest request, CancellationToken cancellationToken = default);
+    Task<SchemaResponse> DiscoverSchemaAsync(DiscoverSchemaRequest request, CancellationToken cancellationToken = default);
 }

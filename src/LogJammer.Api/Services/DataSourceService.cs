@@ -1,6 +1,8 @@
 using LogJammer.Api.Dtos;
 using LogJammer.Core.Entities;
+using LogJammer.Core.Enums;
 using LogJammer.Core.Interfaces;
+using LogJammer.Infrastructure.Adapters.Elasticsearch;
 
 namespace LogJammer.Api.Services;
 
@@ -134,6 +136,46 @@ public class DataSourceService(
             {
                 Timestamp = r.Timestamp,
                 Fields = r.Fields
+            }).ToList()
+        };
+    }
+
+    public async Task<DiscoverIndicesResponse> DiscoverIndicesAsync(DiscoverIndicesRequest request, CancellationToken cancellationToken = default)
+    {
+        var adapter = (ElasticsearchAdapter)adapterFactory.CreateAdapter(
+            AdapterType.Elasticsearch, request.ConnectionConfig);
+
+        var (aliases, dataStreams, concreteIndices) = await adapter.DiscoverIndicesAsync(
+            request.ShowConcreteIndices, cancellationToken);
+
+        return new DiscoverIndicesResponse
+        {
+            Aliases = aliases.Select(a => new AliasInfo
+            {
+                Name = a.Alias,
+                Indices = a.Indices
+            }).ToList(),
+            DataStreams = dataStreams.Select(ds => new DataStreamInfo
+            {
+                Name = ds.Name,
+                BackingIndices = ds.BackingIndices
+            }).ToList(),
+            ConcreteIndices = concreteIndices
+        };
+    }
+
+    public async Task<SchemaResponse> DiscoverSchemaAsync(DiscoverSchemaRequest request, CancellationToken cancellationToken = default)
+    {
+        var adapter = adapterFactory.CreateAdapter(AdapterType.Elasticsearch, request.ConnectionConfig);
+        var fields = await adapter.GetSchemaAsync(cancellationToken);
+
+        return new SchemaResponse
+        {
+            Fields = fields.Select(f => new FieldDefinitionDto
+            {
+                Name = f.Name,
+                Type = f.Type,
+                IsNullable = f.IsNullable
             }).ToList()
         };
     }
