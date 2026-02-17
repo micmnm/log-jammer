@@ -105,3 +105,36 @@ public record DeletionImpactResponse
     public int TagCount { get; init; }
     public int RuleCount { get; init; }
 }
+
+public record DiscoverIndicesRequest
+{
+    [Required]
+    public required string ConnectionConfig { get; init; }
+
+    public bool ShowConcreteIndices { get; init; } = false;
+}
+
+public record DiscoverSchemaRequest
+{
+    [Required]
+    public required string ConnectionConfig { get; init; }
+}
+
+public record DiscoverIndicesResponse
+{
+    public required IReadOnlyList<AliasInfo> Aliases { get; init; }
+    public required IReadOnlyList<DataStreamInfo> DataStreams { get; init; }
+    public IReadOnlyList<string> ConcreteIndices { get; init; } = [];
+}
+
+public record AliasInfo
+{
+    public required string Name { get; init; }
+    public required IReadOnlyList<string> Indices { get; init; }
+}
+
+public record DataStreamInfo
+{
+    public required string Name { get; init; }
+    public int BackingIndices { get; init; }
+}
