@@ -116,6 +116,75 @@ public class ElasticsearchAdapter : IDataSourceAdapter
         return fields.DistinctBy(f => f.Name).OrderBy(f => f.Name).ToList();
     }
 
+    public async Task<(IReadOnlyList<(string Alias, IReadOnlyList<string> Indices)> Aliases,
+        IReadOnlyList<(string Name, int BackingIndices)> DataStreams,
+        IReadOnlyList<string> ConcreteIndices)> DiscoverIndicesAsync(
+        bool includeConcreteIndices, CancellationToken cancellationToken = default)
+    {
+        // Get aliases
+        var aliases = new List<(string Alias, IReadOnlyList<string> Indices)>();
+        try
+        {
+            var aliasResponse = await _client.Indices.GetAliasAsync(new GetAliasRequest(), cancellationToken);
+            if (aliasResponse.IsValidResponse && aliasResponse.Aliases is not null)
+            {
+                var aliasMap = new Dictionary<string, List<string>>();
+                foreach (var kvp in aliasResponse.Aliases)
+                {
+                    var indexName = kvp.Key;
+                    var indexAliases = kvp.Value;
+                    if (indexAliases.Aliases is null) continue;
+                    foreach (var aliasKvp in indexAliases.Aliases)
+                    {
+                        var aliasName = aliasKvp.Key;
+                        if (!aliasMap.ContainsKey(aliasName))
+                            aliasMap[aliasName] = [];
+                        aliasMap[aliasName].Add(indexName);
+                    }
+                }
+                aliases = aliasMap.Select(kvp =>
+                    ((string Alias, IReadOnlyList<string> Indices))(kvp.Key, kvp.Value.AsReadOnly())).ToList();
+            }
+        }
+        catch { /* alias discovery is best-effort */ }
+
+        // Get data streams
+        var dataStreams = new List<(string Name, int BackingIndices)>();
+        try
+        {
+            var dsResponse = await _client.Indices.GetDataStreamAsync(
+                new GetDataStreamRequest(), cancellationToken);
+            if (dsResponse.IsValidResponse && dsResponse.DataStreams is not null)
+            {
+                foreach (var ds in dsResponse.DataStreams)
+                {
+                    dataStreams.Add((ds.Name, ds.Indices?.Count ?? 0));
+                }
+            }
+        }
+        catch { /* data stream discovery is best-effort */ }
+
+        // Get concrete indices (optional)
+        var concreteIndices = new List<string>();
+        if (includeConcreteIndices)
+        {
+            try
+            {
+                var statsResponse = await _client.Indices.StatsAsync(cancellationToken);
+                if (statsResponse.IsValidResponse && statsResponse.Indices is not null)
+                {
+                    foreach (var kvp in statsResponse.Indices)
+                    {
+                        concreteIndices.Add(kvp.Key);
+                    }
+                }
+            }
+            catch { /* index discovery is best-effort */ }
+        }
+
+        return (aliases.AsReadOnly(), dataStreams.AsReadOnly(), concreteIndices.AsReadOnly());
+    }
+
     private static List<RawLogEntry> ParseHits(SearchResponse<JsonDocument> response)
     {
         var entries = new List<RawLogEntry>();
