@@ -8,6 +8,12 @@
 
 **Tech Stack:** C# / ASP.NET Core 10, Elastic.Clients.Elasticsearch, React 19 / MUI v7 / TanStack Query v5
 
+**Status:** All tasks NOT STARTED. Plan updated 2026-02-17 to align with current codebase (post-detect-endpoint, LogFile detect UI, deletion-impact, NOC redesign, etc.).
+
+**Codebase note:** The existing `Detect` endpoint (`POST /api/datasources/detect`) and its LogFile UI in `DataSourceDialog.tsx` provide a close architectural precedent for these discovery endpoints. Follow the same patterns.
+
+**Connection config note:** `ElasticsearchConnectionConfig` uses a nested `Auth` object (`{ url, indexPattern, auth: { type: "basic", username, password } }`). The frontend's `buildConnectionConfig()` currently builds a flat `{ url, indexPattern, username, password }` — this is a pre-existing mismatch. For discovery, build the config JSON to match what `ElasticsearchAdapter` actually deserializes (nested auth). Consider fixing `buildConnectionConfig()` for the ES case to use the correct nested format while you're in there.
+
 ---
 
 ### Task 1: Add Discovery DTOs
@@ -17,7 +23,7 @@
 
 **Step 1: Add the new request/response DTOs to the existing file**
 
-Add at the end of `src/LogJammer.Api/Dtos/DataSourceDtos.cs`:
+Add at the end of `src/LogJammer.Api/Dtos/DataSourceDtos.cs` (after `DeletionImpactResponse`):
 
 ```csharp
 public record DiscoverIndicesRequest
@@ -73,9 +79,11 @@ git commit -m "feat: add discovery DTOs for ES index/schema browsing"
 **Files:**
 - Modify: `src/LogJammer.Infrastructure/Adapters/Elasticsearch/ElasticsearchAdapter.cs`
 
+**Context:** The adapter currently has `TestConnectionAsync`, `PollErrorsAsync`, `GetSampleRecordsAsync`, `GetSchemaAsync`, plus private helpers `ParseHits` and `FlattenProperties`. It uses `_client` (ElasticsearchClient) and `_config` (ElasticsearchConnectionConfig). The existing `using` directives already include `Elastic.Clients.Elasticsearch.IndexManagement`.
+
 **Step 1: Add `DiscoverIndicesAsync` method**
 
-Add to `ElasticsearchAdapter` class:
+Add to `ElasticsearchAdapter` class, after `GetSchemaAsync` (before `ParseHits`):
 
 ```csharp
 public async Task<(IReadOnlyList<(string Alias, IReadOnlyList<string> Indices)> Aliases,
@@ -112,7 +120,7 @@ public async Task<(IReadOnlyList<(string Alias, IReadOnlyList<string> Indices)> 
     try
     {
         var dsResponse = await _client.Indices.GetDataStreamAsync(
-            new Elastic.Clients.Elasticsearch.IndexManagement.GetDataStreamRequest(), cancellationToken);
+            new GetDataStreamRequest(), cancellationToken);
         if (dsResponse.IsValidResponse && dsResponse.DataStreams is not null)
         {
             foreach (var ds in dsResponse.DataStreams)
@@ -150,7 +158,7 @@ public async Task<(IReadOnlyList<(string Alias, IReadOnlyList<string> Indices)> 
 **Step 2: Verify it compiles**
 
 Run: `dotnet build src/LogJammer.Infrastructure/LogJammer.Infrastructure.csproj`
-Expected: Build succeeded. Note: The exact Elasticsearch client API shape for `GetAlias`, `GetDataStream`, and `Cat.Indices` may need adjustment based on the `Elastic.Clients.Elasticsearch` 9.x API. Check the client types if the build fails and adjust accordingly.
+Expected: Build succeeded. Note: The exact Elasticsearch client API shape for `GetAlias`, `GetDataStream`, and `Cat.Indices` may need adjustment based on the `Elastic.Clients.Elasticsearch` 9.x API. Check the client types if the build fails and adjust accordingly. `GetDataStreamRequest` is in the `IndexManagement` namespace which is already imported.
 
 **Step 3: Commit**
 
@@ -167,20 +175,20 @@ git commit -m "feat: add DiscoverIndicesAsync to ElasticsearchAdapter"
 - Modify: `src/LogJammer.Api/Services/IDataSourceService.cs`
 - Modify: `src/LogJammer.Api/Services/DataSourceService.cs`
 
+**Context:** `IDataSourceService` already has `using LogJammer.Api.Dtos;`. `DataSourceService` uses primary constructor syntax: `DataSourceService(IDataSourceRepository repository, IDataSourceAdapterFactory adapterFactory) : IDataSourceService`. The factory creates adapters via `adapterFactory.CreateAdapter(AdapterType, connectionConfig)`.
+
 **Step 1: Add interface methods**
 
-Add to `IDataSourceService`:
+Add to `IDataSourceService` (after `GetSampleRecordsAsync`):
 
 ```csharp
 Task<DiscoverIndicesResponse> DiscoverIndicesAsync(DiscoverIndicesRequest request, CancellationToken cancellationToken = default);
 Task<SchemaResponse> DiscoverSchemaAsync(DiscoverSchemaRequest request, CancellationToken cancellationToken = default);
 ```
 
-Add the `using LogJammer.Api.Dtos;` import if not already present (it should be).
-
 **Step 2: Implement in DataSourceService**
 
-Add to `DataSourceService`:
+Add to `DataSourceService` (before `MapToResponse`):
 
 ```csharp
 public async Task<DiscoverIndicesResponse> DiscoverIndicesAsync(DiscoverIndicesRequest request, CancellationToken cancellationToken = default)
@@ -248,9 +256,11 @@ git commit -m "feat: add DiscoverIndices/DiscoverSchema to DataSourceService"
 **Files:**
 - Modify: `src/LogJammer.Api/Controllers/DataSourcesController.cs`
 
+**Context:** The controller uses primary constructor: `DataSourcesController(IDataSourceService dataSourceService, ILogFileDetectService logFileDetectService) : ControllerBase`. It already imports `LogJammer.Api.Dtos`. The existing `Detect` endpoint provides the error handling pattern to follow (specific exception types, `Problem()` for errors).
+
 **Step 1: Add the two new endpoints**
 
-Add to `DataSourcesController`:
+Add to `DataSourcesController` (before the `Detect` method):
 
 ```csharp
 [HttpPost("discover/indices")]
@@ -258,16 +268,18 @@ public async Task<ActionResult<DiscoverIndicesResponse>> DiscoverIndices(
     [FromBody] DiscoverIndicesRequest request,
     CancellationToken cancellationToken)
 {
-    if (!ModelState.IsValid) return BadRequest(ModelState);
-
     try
     {
         var result = await dataSourceService.DiscoverIndicesAsync(request, cancellationToken);
         return Ok(result);
     }
+    catch (ArgumentException ex)
+    {
+        return Problem(detail: ex.Message, statusCode: 400);
+    }
     catch (Exception ex)
     {
-        return BadRequest(new { error = ex.Message });
+        return Problem(detail: $"Discovery failed: {ex.Message}", statusCode: 502);
     }
 }
 
@@ -276,16 +288,18 @@ public async Task<ActionResult<SchemaResponse>> DiscoverSchema(
     [FromBody] DiscoverSchemaRequest request,
     CancellationToken cancellationToken)
 {
-    if (!ModelState.IsValid) return BadRequest(ModelState);
-
     try
     {
         var result = await dataSourceService.DiscoverSchemaAsync(request, cancellationToken);
         return Ok(result);
     }
+    catch (ArgumentException ex)
+    {
+        return Problem(detail: ex.Message, statusCode: 400);
+    }
     catch (Exception ex)
     {
-        return BadRequest(new { error = ex.Message });
+        return Problem(detail: $"Schema discovery failed: {ex.Message}", statusCode: 502);
     }
 }
 ```
@@ -308,6 +322,8 @@ git commit -m "feat: add discover/indices and discover/schema endpoints"
 
 **Files:**
 - Modify: `src/LogJammer.Tests/Integration/Api/DataSourcesControllerTests.cs`
+
+**Context:** Tests use `TestWebApplicationFactory` which mocks `IDataSourceService` via NSubstitute. The test class has `_factory`, `_client`, `_service`, and `_jsonOptions` fields. Existing tests like `GetSchema_WithLogFileSource_ReturnsFields` provide the pattern.
 
 **Step 1: Write the tests**
 
@@ -376,9 +392,11 @@ git commit -m "test: add tests for discover/indices and discover/schema endpoint
 - Modify: `src/frontend/src/api/types.ts`
 - Modify: `src/frontend/src/api/hooks/useDataSources.ts`
 
+**Context:** `types.ts` currently ends with `DetectResponse` (line 269). `useDataSources.ts` exports `useDetectLogFile` as the last hook (line 93) and already imports `useMutation` from `@tanstack/react-query` and `api` from `../client`.
+
 **Step 1: Add TypeScript types**
 
-Add to `src/frontend/src/api/types.ts`:
+Add at the end of `src/frontend/src/api/types.ts`:
 
 ```typescript
 export interface DiscoverIndicesRequest {
@@ -409,16 +427,27 @@ export interface DiscoverIndicesResponse {
 
 **Step 2: Add mutation hooks**
 
-Add to `src/frontend/src/api/hooks/useDataSources.ts`:
+Add the new type imports to the existing import block in `src/frontend/src/api/hooks/useDataSources.ts`:
 
 ```typescript
 import type {
-  // ... existing imports ...
+  DataSourceResponse,
+  CreateDataSourceRequest,
+  UpdateDataSourceRequest,
+  ConnectionTestResponse,
+  SchemaResponse,
+  SampleRecordsResponse,
+  DetectResponse,
+  DeletionImpactResponse,
   DiscoverIndicesRequest,
   DiscoverIndicesResponse,
   DiscoverSchemaRequest,
 } from '../types';
+```
 
+Then add at the end of the file:
+
+```typescript
 export function useDiscoverIndices() {
   return useMutation({
     mutationFn: (request: DiscoverIndicesRequest) =>
@@ -453,37 +482,83 @@ git commit -m "feat: add frontend types and hooks for ES discovery"
 **Files:**
 - Modify: `src/frontend/src/components/DataSourceDialog.tsx`
 
-**Step 1: Add discovery state and imports**
+**Context:** The dialog already imports `Chip`, `CircularProgress`, `Alert`, `Box`, `Typography` from MUI and has a `Detect` button pattern for LogFile (line 297-304) that serves as a close template. The `buildConnectionConfig()` method on line 160 builds ES config. `ElasticsearchConfig` interface on line 30 uses flat `{ url, indexPattern, username, password }`.
 
-Add imports and state variables for:
-- `useDiscoverIndices` and `useDiscoverSchema` hooks
-- State: `discoveredIndices` (the response), `showConcreteIndices` toggle, `discoveredSchema` (fields array), `showSchema` toggle
-- UI components: `Chip`, `List`, `ListItem`, `ListItemButton`, `ListItemText`, `Collapse`, `CircularProgress`, `Typography`, `Divider`, `IconButton`
+**IMPORTANT:** The backend `ElasticsearchConnectionConfig` expects `{ url, indexPattern, auth: { type: "basic", username, password } }` (nested auth). Fix the `ElasticsearchConfig` interface and `buildConnectionConfig()` to match the backend format, OR build a separate `buildDiscoveryConfig()` that produces the correct format for the discovery endpoints.
 
-**Step 2: Add "Discover" button and index list**
+**Step 1: Fix ElasticsearchConfig and buildConnectionConfig**
 
-After the Index Pattern `TextField` in the Elasticsearch section, add:
-- A row with a "Discover Indices" `Button` (disabled if `esUrl` is empty) and a `FormControlLabel` toggle for "Show concrete indices"
-- When clicked, calls `discoverIndices.mutate(...)` with the current URL/auth config
-- Below the button: a collapsible section showing aliases as `Chip` components grouped under an "Aliases" label, data streams under a "Data Streams" label, and optionally concrete indices
-- Clicking an alias/data-stream/index chip sets `esIndexPattern` to that name
+Update the `ElasticsearchConfig` interface and `buildConnectionConfig()` to produce config JSON that matches `ElasticsearchConnectionConfig` on the backend:
 
-**Step 3: Add "View Schema" button and field list**
+```typescript
+interface ElasticsearchConfig {
+  url: string;
+  indexPattern: string;
+  auth?: {
+    type: string;
+    username?: string;
+    password?: string;
+  };
+}
+```
 
-After the index discovery section, add:
+Update `buildConnectionConfig()`:
+```typescript
+if (adapterType === 'Elasticsearch') {
+  const config: ElasticsearchConfig = { url: esUrl, indexPattern: esIndexPattern };
+  if (esUsername || esPassword) {
+    config.auth = { type: 'basic', username: esUsername, password: esPassword };
+  }
+  return JSON.stringify(config);
+}
+```
+
+**Step 2: Add discovery imports and state**
+
+Add to imports:
+```typescript
+import { useDiscoverIndices, useDiscoverSchema } from '../api/hooks/useDataSources';
+import type { DiscoverIndicesResponse } from '../api/types';
+```
+
+Add MUI imports not already present: `List`, `ListItem`, `ListItemText`, `Collapse`, `Divider`
+
+Add state:
+```typescript
+const discoverIndices = useDiscoverIndices();
+const discoverSchema = useDiscoverSchema();
+const [discoveredIndices, setDiscoveredIndices] = useState<DiscoverIndicesResponse | null>(null);
+const [showConcreteIndices, setShowConcreteIndices] = useState(false);
+const [discoveredSchema, setDiscoveredSchema] = useState<SchemaResponse | null>(null);
+const [discoverError, setDiscoverError] = useState<string | null>(null);
+```
+
+Reset these in the `useEffect` when dialog opens (alongside existing resets).
+
+**Step 3: Add "Discover" button and index list**
+
+After the Index Pattern `TextField` in the Elasticsearch section (after line 272), add:
+- A row with a "Discover Indices" `Button` (disabled if `esUrl` is empty or `discoverIndices.isPending`) and a `FormControlLabel` checkbox for "Show concrete indices"
+- Follow the same `Box sx={{ display: 'flex', gap: 1 }}` pattern used by the LogFile Detect button
+- `onClick` handler: build connection config from `esUrl`/`esUsername`/`esPassword` and call `discoverIndices.mutate(...)` with `onSuccess`/`onError`
+- Below the button: render discovered aliases as clickable `Chip` components grouped under a "Aliases" `Typography` label, data streams under a "Data Streams" label, and optionally concrete indices
+- Clicking a chip sets `esIndexPattern` to that name
+
+**Step 4: Add "View Schema" button and field list**
+
+After the index discovery section:
 - A "View Schema" `Button` (disabled if `esIndexPattern` is empty)
-- When clicked, calls `discoverSchema.mutate(...)` with URL/auth/indexPattern config
-- Below: a collapsible list of fields showing `name` and `type` as `ListItem` components
+- `onClick`: build full connection config and call `discoverSchema.mutate(...)`
+- Below: a collapsible list of fields showing `name` and `type`, following the same display pattern used for LogFile detected fields (Chips with field names, lines 368-379)
 
-**Step 4: Implementation details**
+**Step 5: Implementation details**
 
-The full implementation should handle:
-- Loading states (show `CircularProgress` while discovering)
-- Error states (show error `Alert` if discovery fails — e.g., wrong URL/auth)
-- Clear discovered results when adapter type changes or URL changes
-- Build connection config for discovery using existing `esUrl`, `esUsername`, `esPassword` state
+- Loading states: show `CircularProgress` (already imported) in button while pending
+- Error states: show error `Alert` (already imported) if discovery fails
+- Clear `discoveredIndices`/`discoveredSchema`/`discoverError` when `esUrl` changes or adapter type changes
+- Build connection config for discovery using the corrected nested auth format
 
-**Step 5: Verify frontend compiles and renders**
+**Step 6: Verify frontend compiles and renders**
 
 Run: `cd src/frontend && npx tsc --noEmit`
 Expected: No errors
@@ -491,7 +566,7 @@ Expected: No errors
 Run: `cd src/frontend && npm run build`
 Expected: Build succeeds
 
-**Step 6: Commit**
+**Step 7: Commit**
 
 ```bash
 git add src/frontend/src/components/DataSourceDialog.tsx
