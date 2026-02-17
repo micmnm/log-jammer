@@ -202,4 +202,45 @@ public class DataSourcesControllerTests : IDisposable
         var body = await response.Content.ReadFromJsonAsync<SampleRecordsResponse>(_jsonOptions);
         body!.Records.Should().NotBeEmpty();
     }
+
+    [Fact]
+    public async Task DiscoverIndices_ReturnsAliasesAndDataStreams()
+    {
+        _service.DiscoverIndicesAsync(Arg.Any<DiscoverIndicesRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new DiscoverIndicesResponse
+            {
+                Aliases = [new AliasInfo { Name = "app-logs", Indices = ["app-logs-2024.01"] }],
+                DataStreams = [new DataStreamInfo { Name = "logs-nginx", BackingIndices = 3 }],
+                ConcreteIndices = []
+            });
+
+        var request = new DiscoverIndicesRequest { ConnectionConfig = "{\"url\":\"http://localhost:9200\",\"indexPattern\":\"*\"}" };
+        var response = await _client.PostAsJsonAsync("/api/datasources/discover/indices", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<DiscoverIndicesResponse>(_jsonOptions);
+        body!.Aliases.Should().HaveCount(1);
+        body.Aliases[0].Name.Should().Be("app-logs");
+        body.DataStreams.Should().HaveCount(1);
+        body.DataStreams[0].Name.Should().Be("logs-nginx");
+    }
+
+    [Fact]
+    public async Task DiscoverSchema_ReturnsFields()
+    {
+        _service.DiscoverSchemaAsync(Arg.Any<DiscoverSchemaRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new SchemaResponse
+            {
+                Fields = [new FieldDefinitionDto { Name = "@timestamp", Type = "date", IsNullable = false },
+                          new FieldDefinitionDto { Name = "message", Type = "text", IsNullable = true }]
+            });
+
+        var request = new DiscoverSchemaRequest { ConnectionConfig = "{\"url\":\"http://localhost:9200\",\"indexPattern\":\"app-logs\"}" };
+        var response = await _client.PostAsJsonAsync("/api/datasources/discover/schema", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SchemaResponse>(_jsonOptions);
+        body!.Fields.Should().HaveCount(2);
+        body.Fields.Should().Contain(f => f.Name == "message");
+    }
 }
