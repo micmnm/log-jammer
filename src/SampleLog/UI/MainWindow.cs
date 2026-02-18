@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using SampleLog.Generation;
 using SampleLog.Generation.Scenarios;
+using SampleLog.MockElasticsearch;
 using SampleLog.Models;
 using Terminal.Gui;
 
@@ -81,15 +82,20 @@ public sealed class MainWindow : Toplevel
             Text = $"  Log: {_generator.JsonFilePath}",
             X = 0, Y = 0, Width = Dim.Fill()
         };
-        var sep = new Label { Text = new string('=', 120), X = 0, Y = 1, Width = Dim.Fill() };
-        var row1 = new Label { Text = "  [1] Toggle baseline     [5] Rates (inf/wrn/err)", X = 0, Y = 2, Width = Dim.Fill() };
-        var row2 = new Label { Text = "  [2] Spike burst         [6] Volume/load test", X = 0, Y = 3, Width = Dim.Fill() };
-        var row3 = new Label { Text = "  [3] Gradual degradation [7] Stop all", X = 0, Y = 4, Width = Dim.Fill() };
-        var row4 = new Label { Text = "  [4] Correlated failures [C] Copy log path", X = 0, Y = 5, Width = Dim.Fill() };
-        var row5 = new Label { Text = "  [R] Register with LogJammer  [Q] Quit", X = 0, Y = 6, Width = Dim.Fill() };
-        var sep2 = new Label { Text = new string('=', 120), X = 0, Y = 7, Width = Dim.Fill() };
+        var esLabel = new Label
+        {
+            Text = $"  Mock ES: {MockElasticsearchServer.Url}/{MockElasticsearchServer.IndexPattern}",
+            X = 0, Y = 1, Width = Dim.Fill()
+        };
+        var sep = new Label { Text = new string('=', 120), X = 0, Y = 2, Width = Dim.Fill() };
+        var row1 = new Label { Text = "  [1] Toggle baseline     [5] Rates (inf/wrn/err)", X = 0, Y = 3, Width = Dim.Fill() };
+        var row2 = new Label { Text = "  [2] Spike burst         [6] Volume/load test", X = 0, Y = 4, Width = Dim.Fill() };
+        var row3 = new Label { Text = "  [3] Gradual degradation [7] Stop all", X = 0, Y = 5, Width = Dim.Fill() };
+        var row4 = new Label { Text = "  [4] Correlated failures [C] Copy log path", X = 0, Y = 6, Width = Dim.Fill() };
+        var row5 = new Label { Text = "  [R] Register with LogJammer  [Q] Quit", X = 0, Y = 7, Width = Dim.Fill() };
+        var sep2 = new Label { Text = new string('=', 120), X = 0, Y = 8, Width = Dim.Fill() };
 
-        menuView.Add(logPathLabel, sep, row1, row2, row3, row4, row5, sep2);
+        menuView.Add(logPathLabel, esLabel, sep, row1, row2, row3, row4, row5, sep2);
 
         Add(_logView, _statusLabel, menuView);
 
