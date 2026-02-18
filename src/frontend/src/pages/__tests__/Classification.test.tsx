@@ -131,10 +131,12 @@ describe('Classification', () => {
     expect(screen.getByText('database')).toBeInTheDocument();
   });
 
-  it('renders Accept Tags button for items with suggestions', () => {
+  it('renders Accept Top Tag buttons for items with suggestions', () => {
     renderWithProviders(<Classification />);
-    const acceptButtons = screen.getAllByText('Accept Tags');
-    expect(acceptButtons).toHaveLength(2); // q-1 and q-2
+    expect(screen.getByText(/Accept.*network.*92%/)).toBeInTheDocument();
+    expect(screen.getByText(/Accept.*database.*55%/)).toBeInTheDocument();
+    // Accept All only shown when >1 suggestion (q-1 has 2, q-2 has 1)
+    expect(screen.getAllByText('Accept All')).toHaveLength(1);
   });
 
   it('renders Assign Tags button for unmatched items', () => {
@@ -143,14 +145,13 @@ describe('Classification', () => {
     expect(assignButtons).toHaveLength(2); // q-3 and q-4
   });
 
-  it('calls approve mutation when Accept Tags button clicked', async () => {
+  it('calls approve mutation with top tag when Accept Top Tag clicked', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Classification />);
-    const acceptButtons = screen.getAllByText('Accept Tags');
-    await user.click(acceptButtons[0]);
+    await user.click(screen.getByText(/Accept.*network.*92%/));
     expect(mockApprove).toHaveBeenCalledWith({
       id: 'q-1',
-      tagIds: ['t-1', 't-2'],
+      tagIds: ['t-1'],
     });
   });
 

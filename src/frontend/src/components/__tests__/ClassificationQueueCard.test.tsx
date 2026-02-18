@@ -92,10 +92,21 @@ describe('ClassificationQueueCard', () => {
       expect(screen.getByText('Overall confidence: 85%')).toBeInTheDocument();
     });
 
-    it('renders Accept Tags and Reject & Retag buttons', () => {
+    it('renders Accept Top Tag with confidence and Accept All buttons', () => {
       renderWithProviders(<ClassificationQueueCard item={itemWithSuggestions} />);
-      expect(screen.getByText('Accept Tags')).toBeInTheDocument();
+      expect(screen.getByText(/Accept.*network.*92%/)).toBeInTheDocument();
+      expect(screen.getByText('Accept All')).toBeInTheDocument();
       expect(screen.getByText('Reject & Retag')).toBeInTheDocument();
+    });
+
+    it('hides Accept All when only one suggestion', () => {
+      const singleSuggestion = {
+        ...itemWithSuggestions,
+        suggestedTags: [{ tagId: 't-1', tagName: 'network', confidence: 0.92 }],
+      };
+      renderWithProviders(<ClassificationQueueCard item={singleSuggestion} />);
+      expect(screen.getByText(/Accept.*network.*92%/)).toBeInTheDocument();
+      expect(screen.queryByText('Accept All')).not.toBeInTheDocument();
     });
 
     it('does not render UNMATCHED badge', () => {
@@ -129,7 +140,7 @@ describe('ClassificationQueueCard', () => {
     it('renders Assign Tags button instead of Accept/Reject', () => {
       renderWithProviders(<ClassificationQueueCard item={itemUnmatched} />);
       expect(screen.getByText('Assign Tags')).toBeInTheDocument();
-      expect(screen.queryByText('Accept Tags')).not.toBeInTheDocument();
+      expect(screen.queryByText('Accept All')).not.toBeInTheDocument();
       expect(screen.queryByText('Reject & Retag')).not.toBeInTheDocument();
     });
 
@@ -146,11 +157,23 @@ describe('ClassificationQueueCard', () => {
     });
   });
 
-  describe('Accept Tags action', () => {
-    it('calls approve mutation with suggested tag IDs', async () => {
+  describe('Accept Top Tag action', () => {
+    it('calls approve mutation with only the best tag ID', async () => {
       const user = userEvent.setup();
       renderWithProviders(<ClassificationQueueCard item={itemWithSuggestions} />);
-      await user.click(screen.getByText('Accept Tags'));
+      await user.click(screen.getByText(/Accept.*network.*92%/));
+      expect(mockApprove).toHaveBeenCalledWith({
+        id: 'q-1',
+        tagIds: ['t-1'],
+      });
+    });
+  });
+
+  describe('Accept All action', () => {
+    it('calls approve mutation with all suggested tag IDs', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<ClassificationQueueCard item={itemWithSuggestions} />);
+      await user.click(screen.getByText('Accept All'));
       expect(mockApprove).toHaveBeenCalledWith({
         id: 'q-1',
         tagIds: ['t-1', 't-2'],

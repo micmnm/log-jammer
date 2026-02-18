@@ -26,6 +26,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import LabelIcon from '@mui/icons-material/Label';
+import StarIcon from '@mui/icons-material/Star';
 import { useApproveClassification, useRejectClassification } from '../api/hooks/useClassification';
 import { useTags, useCreateTag } from '../api/hooks/useTags';
 import type { ClassificationQueueResponse, TagResponse } from '../api/types';
@@ -86,6 +87,9 @@ export default function ClassificationQueueCard({ item }: ClassificationQueueCar
   const { data: allTags } = useTags();
 
   const hasSuggestions = item.suggestedTags.length > 0;
+  const bestTag = hasSuggestions
+    ? item.suggestedTags.reduce((best, t) => (t.confidence > best.confidence ? t : best))
+    : null;
   const severityColor = SEVERITY_COLORS[item.severity] ?? '#29b6f6';
 
   const borderColor = hasSuggestions
@@ -102,6 +106,14 @@ export default function ClassificationQueueCard({ item }: ClassificationQueueCar
     approve.mutate({
       id: item.id,
       tagIds: item.suggestedTags.map((t) => t.tagId),
+    });
+  };
+
+  const handleAcceptTopTag = () => {
+    if (!bestTag) return;
+    approve.mutate({
+      id: item.id,
+      tagIds: [bestTag.tagId],
     });
   };
 
@@ -244,18 +256,23 @@ export default function ClassificationQueueCard({ item }: ClassificationQueueCar
                 {item.suggestedTags.map((tag) => {
                   const pct = Math.round(tag.confidence * 100);
                   const barColor = pct >= 70 ? '#00e676' : pct >= 40 ? '#ffb300' : '#ff1744';
+                  const isBest = bestTag != null && tag.tagId === bestTag.tagId;
                   return (
                     <Box key={tag.tagId} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          minWidth: 80,
-                          fontWeight: 500,
-                          fontSize: '0.8rem',
-                        }}
-                      >
-                        {tag.tagName}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 80 }}>
+                        {isBest && (
+                          <StarIcon sx={{ fontSize: 14, color: '#ffc107' }} />
+                        )}
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: isBest ? 700 : 500,
+                            fontSize: '0.8rem',
+                          }}
+                        >
+                          {tag.tagName}
+                        </Typography>
+                      </Box>
                       <LinearProgress
                         variant="determinate"
                         value={pct}
@@ -339,11 +356,23 @@ export default function ClassificationQueueCard({ item }: ClassificationQueueCar
                 variant="contained"
                 color="success"
                 startIcon={<CheckIcon />}
-                onClick={handleAcceptTags}
+                onClick={handleAcceptTopTag}
                 disabled={approve.isPending}
               >
-                Accept Tags
+                Accept &ldquo;{bestTag!.tagName}&rdquo; {Math.round(bestTag!.confidence * 100)}%
               </Button>
+              {item.suggestedTags.length > 1 && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="success"
+                  startIcon={<CheckIcon />}
+                  onClick={handleAcceptTags}
+                  disabled={approve.isPending}
+                >
+                  Accept All
+                </Button>
+              )}
               <Button
                 size="small"
                 variant="outlined"
