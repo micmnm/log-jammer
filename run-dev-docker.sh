@@ -31,6 +31,12 @@ echo "  Press Ctrl+C to stop"
 echo "========================================"
 echo ""
 
+# Check Docker is running
+if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: Docker is not running. Please start Docker Desktop and try again."
+    exit 1
+fi
+
 # Start PostgreSQL with pgvector
 echo "Starting PostgreSQL (pgvector)..."
 docker compose -f "$SCRIPT_DIR/docker-compose.dev.yml" up -d
