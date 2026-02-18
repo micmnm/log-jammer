@@ -51,7 +51,12 @@ export default function ActiveSubscriptions({ subscriptions, onUpdate }: Props) 
                   {sub.lastPollAt && ` · Last: ${new Date(sub.lastPollAt).toLocaleTimeString()}`}
                 </Typography>
                 {sub.lastError && (
-                  <Typography variant="caption" color="error" display="block" sx={{ mt: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    color="error"
+                    display="block"
+                    sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: sub.lastError.includes('---') ? 'monospace' : undefined, fontSize: sub.lastError.includes('---') ? '0.65rem' : undefined }}
+                  >
                     {sub.lastError}
                   </Typography>
                 )}

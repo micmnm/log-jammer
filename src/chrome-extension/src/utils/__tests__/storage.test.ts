@@ -32,7 +32,7 @@ describe('StorageManager', () => {
   });
 
   it('saves and retrieves settings', async () => {
-    const custom: ExtensionSettings = { logJammerUrl: 'http://example.com', apiToken: 'test-token', maxCapturedQueries: 100 };
+    const custom: ExtensionSettings = { logJammerUrl: 'http://example.com', apiToken: 'test-token', maxCapturedQueries: 100, defaultPollIntervalMinutes: 5, verbose: false, errorDetails: false };
     await StorageManager.saveSettings(custom);
     const settings = await StorageManager.getSettings();
     expect(settings.logJammerUrl).toBe('http://example.com');

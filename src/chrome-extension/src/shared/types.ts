@@ -5,6 +5,8 @@ export interface CapturedQuery {
   method: string;
   indexPattern: string;
   queryDsl: Record<string, unknown>;
+  /** Full bsearch request body (batch wrapper included) for replay */
+  fullRequestBody?: Record<string, unknown>;
   summary: string;
   capturedAt: string;
 }
@@ -24,12 +26,18 @@ export interface ExtensionSettings {
   logJammerUrl: string;
   apiToken: string;
   maxCapturedQueries: number;
+  defaultPollIntervalMinutes: number;
+  verbose: boolean;
+  errorDetails: boolean;
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  logJammerUrl: 'http://localhost:5050',
+  logJammerUrl: 'http://localhost:5000',
   apiToken: '',
   maxCapturedQueries: 50,
+  defaultPollIntervalMinutes: 5,
+  verbose: false,
+  errorDetails: false,
 };
 
 export interface IngestEntry {

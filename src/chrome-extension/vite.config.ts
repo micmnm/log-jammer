@@ -13,6 +13,7 @@ export default defineConfig({
         popup: resolve(__dirname, 'src/popup/popup.html'),
         'service-worker': resolve(__dirname, 'src/background/service-worker.ts'),
         'content-script': resolve(__dirname, 'src/content/kibana-interceptor.ts'),
+        'page-interceptor': resolve(__dirname, 'src/content/page-interceptor.ts'),
       },
       output: {
         entryFileNames: '[name].js',

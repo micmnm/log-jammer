@@ -4,6 +4,8 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Switch from '@mui/material/Switch';
 import type { ExtensionSettings } from '../../shared/types';
 
 interface Props {
@@ -15,6 +17,9 @@ export default function Settings({ settings, onSave }: Props) {
   const [url, setUrl] = useState(settings.logJammerUrl);
   const [apiToken, setApiToken] = useState(settings.apiToken);
   const [maxQueries, setMaxQueries] = useState(String(settings.maxCapturedQueries));
+  const [pollInterval, setPollInterval] = useState(String(settings.defaultPollIntervalMinutes ?? 5));
+  const [verbose, setVerbose] = useState(settings.verbose ?? false);
+  const [errorDetails, setErrorDetails] = useState(settings.errorDetails ?? false);
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
@@ -25,6 +30,9 @@ export default function Settings({ settings, onSave }: Props) {
           logJammerUrl: url.replace(/\/+$/, ''), // trim trailing slash
           apiToken: apiToken.trim(),
           maxCapturedQueries: parseInt(maxQueries, 10) || 50,
+          defaultPollIntervalMinutes: parseFloat(pollInterval) || 5,
+          verbose,
+          errorDetails,
         },
       },
       () => {
@@ -65,6 +73,30 @@ export default function Settings({ settings, onSave }: Props) {
         fullWidth
         slotProps={{ htmlInput: { min: 10, max: 200 } }}
       />
+      <TextField
+        label="Default poll interval (minutes)"
+        type="number"
+        value={pollInterval}
+        onChange={(e) => setPollInterval(e.target.value)}
+        size="small"
+        fullWidth
+        slotProps={{ htmlInput: { min: 0.5, max: 60, step: 0.5 } }}
+        helperText="How often subscriptions poll Kibana (min 0.5m)"
+      />
+      <FormControlLabel
+        control={<Switch checked={verbose} onChange={(e) => setVerbose(e.target.checked)} />}
+        label="Verbose logging"
+      />
+      <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+        Detailed console logs for interceptor and polling
+      </Typography>
+      <FormControlLabel
+        control={<Switch checked={errorDetails} onChange={(e) => setErrorDetails(e.target.checked)} />}
+        label="Error details"
+      />
+      <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+        On poll failure, log original captured URL/payload vs actual request URL/payload
+      </Typography>
       <Button variant="contained" onClick={handleSave}>
         Save Settings
       </Button>

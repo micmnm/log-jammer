@@ -7,6 +7,26 @@ const KEYS = {
   subscriptions: 'lj_subscriptions',
 } as const;
 
+function stripTimestampRange(queryDsl: Record<string, unknown>): Record<string, unknown> {
+  const clone = JSON.parse(JSON.stringify(queryDsl)) as Record<string, unknown>;
+  const query = clone.query as Record<string, unknown> | undefined;
+  const bool = query?.bool as Record<string, unknown> | undefined;
+  if (!bool) return clone;
+
+  for (const clause of ['filter', 'must', 'should'] as const) {
+    const items = bool[clause];
+    if (!Array.isArray(items)) continue;
+    bool[clause] = items.filter((item: Record<string, unknown>) => {
+      if ('range' in item) {
+        const range = item.range as Record<string, unknown>;
+        if ('@timestamp' in range) return false;
+      }
+      return true;
+    });
+  }
+  return clone;
+}
+
 export const StorageManager = {
   async getSettings(): Promise<ExtensionSettings> {
     const result = await chrome.storage.local.get([KEYS.settings]);
@@ -26,8 +46,9 @@ export const StorageManager = {
     const settings = await this.getSettings();
     const queries = await this.getCapturedQueries();
 
+    const strippedNew = stripTimestampRange(query.queryDsl);
     const existing = queries.findIndex(
-      q => JSON.stringify(q.queryDsl) === JSON.stringify(query.queryDsl)
+      q => JSON.stringify(stripTimestampRange(q.queryDsl)) === JSON.stringify(strippedNew)
         && q.indexPattern === query.indexPattern
     );
     if (existing >= 0) {
