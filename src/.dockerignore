@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/models/
+.git/
+.claude/
+.vscode/
+.idea/
+data/
+*.md
+**/TestResults/
