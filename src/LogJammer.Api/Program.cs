@@ -61,6 +61,7 @@ try
     builder.Services.AddScoped<LogJammer.Api.Services.IAlertService, LogJammer.Api.Services.AlertService>();
     builder.Services.AddScoped<LogJammer.Api.Services.ISpikeDetectionRuleService, LogJammer.Api.Services.SpikeDetectionRuleService>();
     builder.Services.AddScoped<LogJammer.Api.Services.IFingerprintConfigService, LogJammer.Api.Services.FingerprintConfigService>();
+    builder.Services.AddScoped<LogJammer.Api.Services.IIngestService, LogJammer.Api.Services.IngestService>();
     builder.Services.AddScoped<LogJammer.Core.Interfaces.IFingerprintConfigRepository, LogJammer.Infrastructure.Repositories.FingerprintConfigRepository>();
 
     // Pipeline (repos, mapper, calculator, background services)

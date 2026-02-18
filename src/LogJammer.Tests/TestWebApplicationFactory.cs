@@ -31,6 +31,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     public IAlertService AlertService { get; } = Substitute.For<IAlertService>();
     public ISpikeDetectionRuleService SpikeDetectionRuleService { get; } = Substitute.For<ISpikeDetectionRuleService>();
     public IFingerprintConfigService FingerprintConfigService { get; } = Substitute.For<IFingerprintConfigService>();
+    public IIngestService IngestService { get; } = Substitute.For<IIngestService>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -68,6 +69,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
             services.RemoveAll<IFingerprintConfigService>();
             services.AddSingleton(FingerprintConfigService);
+
+            services.RemoveAll<IIngestService>();
+            services.AddSingleton(IngestService);
 
             // Remove background hosted services (they depend on real repositories)
             services.RemoveAll<IHostedService>();

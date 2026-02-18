@@ -85,7 +85,7 @@ export interface ClassificationQueuePagedResponse {
   pageSize: number;
 }
 
-export type AdapterType = 'Elasticsearch' | 'PostgreSql' | 'LogFile';
+export type AdapterType = 'Elasticsearch' | 'PostgreSql' | 'LogFile' | 'KibanaProxy';
 
 export interface FingerprintConfigResponse {
   id: string;

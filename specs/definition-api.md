@@ -108,6 +108,18 @@ Base URL: `http://localhost:5050`
 | POST | `/api/classification/queue/{id}/approve` | Accept suggested tags (or user-assigned tags for unmatched items) | Implemented |
 | POST | `/api/classification/queue/{id}/reject` | Reject with user-provided tags and optional reason | Implemented |
 
+## Ingest (Push)
+
+| Method | Endpoint | Description | Status |
+|--------|----------|-------------|--------|
+| POST | `/api/ingest/{dataSourceId}` | Push log entries into a KibanaProxy data source | Implemented |
+
+**POST /api/ingest/{dataSourceId}**
+- Body: IngestRequest (entries array)
+- 200: IngestResponse with accepted/duplicates/failed counts
+- 400: DataSource is not KibanaProxy type
+- 404: DataSource not found
+
 ## Static Files & SPA
 
 | Path | Description |

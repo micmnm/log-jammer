@@ -4,5 +4,6 @@ public enum AdapterType
 {
     Elasticsearch,
     LogFile,
-    PostgreSql
+    PostgreSql,
+    KibanaProxy
 }

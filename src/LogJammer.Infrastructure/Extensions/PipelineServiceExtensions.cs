@@ -22,6 +22,7 @@ public static class PipelineServiceExtensions
         // Pipeline components
         services.AddSingleton<ISchemaMapper, SchemaMapper>();
         services.AddSingleton<IFingerprintCalculator, FingerprintCalculator>();
+        services.AddScoped<ILogIngestionPipeline, LogIngestionPipeline>();
 
         // ML / Classification
         services.AddSingleton(sp =>

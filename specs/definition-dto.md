@@ -44,6 +44,7 @@
 - `Elasticsearch`
 - `LogFile`
 - `PostgreSql`
+- `KibanaProxy`
 
 ### ThresholdType
 `LogJammer.Core.Enums.ThresholdType`
@@ -508,6 +509,27 @@ Maps merged fingerprint hashes to their target KnownError. When ClassificationPr
 ### DeletionImpactResponse (DTO)
 `LogJammer.Api.Dtos.DataSourceDtos`
 - `DeletionImpactResponse`: `ErrorGroupCount`, `OccurrenceCount`, `AlertCount`, `ClassificationQueueCount`, `TagCount`, `RuleCount` (all `int`)
+
+### IngestionResult
+`LogJammer.Core.Models.IngestionResult`
+- `Accepted` (int): Number of new unique errors ingested
+- `Duplicates` (int): Number of entries matching existing error groups
+- `Failed` (int): Number of entries that failed processing
+
+### IngestRequest
+`LogJammer.Api.Dtos.IngestDtos`
+- `Entries` (IngestEntry[]): Required, min 1 entry
+
+### IngestEntry
+`LogJammer.Api.Dtos.IngestDtos`
+- `Timestamp` (DateTime): Required
+- `Fields` (Dictionary<string, object?>): Required, raw key-value pairs
+
+### IngestResponse
+`LogJammer.Api.Dtos.IngestDtos`
+- `Accepted` (int)
+- `Duplicates` (int)
+- `Failed` (int)
 
 ---
 
