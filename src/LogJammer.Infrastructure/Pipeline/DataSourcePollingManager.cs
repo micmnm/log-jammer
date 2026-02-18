@@ -43,7 +43,9 @@ public class DataSourcePollingManager(
         var dataSourceRepo = scope.ServiceProvider.GetRequiredService<IDataSourceRepository>();
         var dataSources = await dataSourceRepo.GetAllAsync(stoppingToken);
 
-        var enabledIds = dataSources.Where(ds => ds.Enabled).Select(ds => ds.Id).ToHashSet();
+        var enabledIds = dataSources
+            .Where(ds => ds.Enabled && ds.AdapterType != Core.Enums.AdapterType.KibanaProxy)
+            .Select(ds => ds.Id).ToHashSet();
 
         // Stop services for disabled/removed data sources
         foreach (var (id, entry) in _runningServices)
