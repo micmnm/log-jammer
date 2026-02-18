@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using SampleLog.Generation;
 using SampleLog.Models;
+using SampleLog.MockElasticsearch;
 using SampleLog.UI;
 using Terminal.Gui;
 
@@ -24,6 +25,9 @@ var library = JsonSerializer.Deserialize<LogLibrary>(libraryJson)
 
 using var generator = new LogGenerator(library, outputConfig);
 var runner = new ScenarioRunner();
+
+await using var mockEs = new MockElasticsearchServer(generator);
+await mockEs.StartAsync();
 
 Application.Init();
 var mainWindow = new MainWindow(generator, runner, defaults, apiConfig);
