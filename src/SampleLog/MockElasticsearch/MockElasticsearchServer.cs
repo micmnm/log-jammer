@@ -27,6 +27,14 @@ public sealed class MockElasticsearchServer : IAsyncDisposable
         builder.Logging.ClearProviders(); // keep TUI clean
 
         _app = builder.Build();
+
+        // ES client requires this header to accept the server as a genuine ES instance
+        _app.Use(async (ctx, next) =>
+        {
+            ctx.Response.Headers["X-Elastic-Product"] = "Elasticsearch";
+            await next();
+        });
+
         MapEndpoints();
     }
 
