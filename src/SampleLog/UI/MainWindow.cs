@@ -584,22 +584,24 @@ public sealed class MainWindow : Toplevel
         {
             Title = "Register with LogJammer",
             Width = 50,
-            Height = 10
+            Height = 12
         };
 
-        var label = new Label { Text = "Register which log file?", X = 1, Y = 1 };
+        var label = new Label { Text = "Register which data source?", X = 1, Y = 1 };
         var jsonBtn = new Button { Text = "[1] JSON", X = 1, Y = 3 };
         var textBtn = new Button { Text = "[2] Text", X = 14, Y = 3 };
         var bothBtn = new Button { Text = "[3] Both", X = 27, Y = 3 };
+        var esBtn = new Button { Text = "[4] Elasticsearch", X = 1, Y = 5 };
         var cancelBtn = new Button { Text = "Cancel" };
 
         string? choice = null;
         jsonBtn.Accepting += (s, e) => { e.Cancel = true; choice = "json"; Application.RequestStop(); };
         textBtn.Accepting += (s, e) => { e.Cancel = true; choice = "text"; Application.RequestStop(); };
         bothBtn.Accepting += (s, e) => { e.Cancel = true; choice = "both"; Application.RequestStop(); };
+        esBtn.Accepting += (s, e) => { e.Cancel = true; choice = "elasticsearch"; Application.RequestStop(); };
         cancelBtn.Accepting += (s, e) => { e.Cancel = true; Application.RequestStop(); };
 
-        dialog.Add(label, jsonBtn, textBtn, bothBtn);
+        dialog.Add(label, jsonBtn, textBtn, bothBtn, esBtn);
         dialog.AddButton(cancelBtn);
         Application.Run(dialog);
         dialog.Dispose();
@@ -610,6 +612,12 @@ public sealed class MainWindow : Toplevel
 
     private async void RegisterAsync(string mode)
     {
+        if (mode == "elasticsearch")
+        {
+            await RegisterElasticsearchAsync();
+            return;
+        }
+
         var filesToRegister = new List<(string path, string name)>();
 
         if (mode is "json" or "both")
@@ -675,6 +683,44 @@ public sealed class MainWindow : Toplevel
             {
                 AddStatusLine($"ERR  [register] {ex.Message}");
             }
+        }
+    }
+
+    private async Task RegisterElasticsearchAsync()
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(_apiConfig.BaseUrl) };
+
+        try
+        {
+            var connectionConfig = JsonSerializer.Serialize(new
+            {
+                url = MockElasticsearchServer.Url,
+                indexPattern = MockElasticsearchServer.IndexPattern
+            });
+
+            var createPayload = JsonSerializer.Serialize(new
+            {
+                name = "SampleLog Elasticsearch",
+                adapterType = "Elasticsearch",
+                connectionConfig,
+                pollIntervalSeconds = 30,
+                enabled = true
+            });
+
+            var response = await http.PostAsync("/api/datasources",
+                new StringContent(createPayload, System.Text.Encoding.UTF8, "application/json"));
+
+            if (response.IsSuccessStatusCode)
+                AddStatusLine("INF  [register] SampleLog Elasticsearch registered successfully");
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                AddStatusLine($"ERR  [register] ES registration failed: {err}");
+            }
+        }
+        catch (Exception ex)
+        {
+            AddStatusLine($"ERR  [register] {ex.Message}");
         }
     }
 
