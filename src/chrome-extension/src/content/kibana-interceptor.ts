@@ -67,5 +67,15 @@ function extractIndexFromUrl(url: string): string {
   return match ? match[1] : 'unknown';
 }
 
+// Notify service worker that a Kibana page is active (resumes paused subscriptions)
+function notifyKibanaActive(): void {
+  try {
+    chrome.runtime.sendMessage({ type: 'KIBANA_SESSION_ACTIVE' });
+  } catch {
+    // Extension context may not be available
+  }
+}
+
 // Run immediately at document_start
 patchFetch();
+notifyKibanaActive();

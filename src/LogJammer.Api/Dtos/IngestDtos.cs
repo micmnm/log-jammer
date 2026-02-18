@@ -6,6 +6,7 @@ public record IngestRequest
 {
     [Required]
     [MinLength(1)]
+    [MaxLength(10000)]
     public required IReadOnlyList<IngestEntry> Entries { get; init; }
 }
 

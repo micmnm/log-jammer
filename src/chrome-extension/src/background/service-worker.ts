@@ -30,6 +30,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     StorageManager.saveSettings(message.payload).then(() => sendResponse({ ok: true }));
     return true;
   }
+
+  if (message.type === 'KIBANA_SESSION_ACTIVE') {
+    resumePausedSubscriptions().then(() => sendResponse({ ok: true }));
+    return true;
+  }
 });
 
 async function handleCapturedQuery(payload: {
@@ -77,9 +82,12 @@ async function handleSubscribe(payload: {
 
   // Create DataSource in Log Jammer
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (settings.apiToken) headers['Authorization'] = `Bearer ${settings.apiToken}`;
+
     const dsResponse = await fetch(`${settings.logJammerUrl}/api/datasources`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         name: payload.name,
         adapterType: 'KibanaProxy',
@@ -117,7 +125,7 @@ async function handleSubscribe(payload: {
     // Set up alarm
     chrome.alarms.create(`poll_${subscription.id}`, {
       periodInMinutes: payload.pollIntervalMinutes,
-      delayInMinutes: 0, // Fire immediately, then on interval
+      delayInMinutes: 0.5, // Chrome minimum is 0.5; fires soon, then on interval
     });
 
     return { ok: true, subscriptionId: subscription.id };
@@ -195,11 +203,14 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
       fields: hit._source as Record<string, unknown> ?? {},
     }));
 
+    const ingestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (settings.apiToken) ingestHeaders['Authorization'] = `Bearer ${settings.apiToken}`;
+
     const ingestResponse = await fetch(
       `${settings.logJammerUrl}/api/ingest/${subscription.dataSourceId}`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ingestHeaders,
         body: JSON.stringify({ entries }),
       }
     );
@@ -278,6 +289,28 @@ function extractHits(data: Record<string, unknown>): Array<Record<string, unknow
   }
 
   return [];
+}
+
+// --- Session resume: re-activate paused subscriptions when Kibana page loads ---
+
+async function resumePausedSubscriptions(): Promise<void> {
+  const subscriptions = await StorageManager.getSubscriptions();
+  let resumed = false;
+  for (const sub of subscriptions) {
+    if (sub.status === 'paused') {
+      sub.status = 'active';
+      sub.lastError = null;
+      await StorageManager.saveSubscription(sub);
+      chrome.alarms.create(`poll_${sub.id}`, {
+        periodInMinutes: sub.pollIntervalMinutes,
+        delayInMinutes: 0.5,
+      });
+      resumed = true;
+    }
+  }
+  if (resumed) {
+    chrome.action.setBadgeText({ text: '' });
+  }
 }
 
 // --- Startup: restore alarms for active subscriptions ---

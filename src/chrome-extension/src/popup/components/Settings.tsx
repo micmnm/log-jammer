@@ -13,6 +13,7 @@ interface Props {
 
 export default function Settings({ settings, onSave }: Props) {
   const [url, setUrl] = useState(settings.logJammerUrl);
+  const [apiToken, setApiToken] = useState(settings.apiToken);
   const [maxQueries, setMaxQueries] = useState(String(settings.maxCapturedQueries));
   const [saved, setSaved] = useState(false);
 
@@ -22,6 +23,7 @@ export default function Settings({ settings, onSave }: Props) {
         type: 'UPDATE_SETTINGS',
         payload: {
           logJammerUrl: url.replace(/\/+$/, ''), // trim trailing slash
+          apiToken: apiToken.trim(),
           maxCapturedQueries: parseInt(maxQueries, 10) || 50,
         },
       },
@@ -43,6 +45,16 @@ export default function Settings({ settings, onSave }: Props) {
         fullWidth
         placeholder="http://localhost:5050"
         helperText="The URL of your Log Jammer instance"
+      />
+      <TextField
+        label="API Token"
+        value={apiToken}
+        onChange={(e) => setApiToken(e.target.value)}
+        size="small"
+        fullWidth
+        type="password"
+        placeholder="Optional — required if auth is enabled"
+        helperText="Bearer token for Log Jammer API authentication"
       />
       <TextField
         label="Max captured queries"

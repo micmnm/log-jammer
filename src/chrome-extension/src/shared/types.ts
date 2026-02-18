@@ -22,11 +22,13 @@ export interface Subscription {
 
 export interface ExtensionSettings {
   logJammerUrl: string;
+  apiToken: string;
   maxCapturedQueries: number;
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   logJammerUrl: 'http://localhost:5050',
+  apiToken: '',
   maxCapturedQueries: 50,
 };
 
