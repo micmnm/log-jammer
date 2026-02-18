@@ -445,3 +445,6 @@ FodyWeavers.xsd
 # SampleLog generated output
 src/SampleLog/logs/
 src/SampleLog/*.zip
+
+# Git worktrees
+.worktrees/
