@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LogJammer.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class HealthController : ControllerBase
 {

@@ -1,6 +1,16 @@
 # Definition API
 
-Base URL: `http://localhost:5000`
+Base URL: `http://localhost:5050`
+
+## Authentication
+
+| Method | Path | Description | Status |
+|--------|------|-------------|--------|
+| POST | `/api/auth/login` | Login with username/password, returns API token | Implemented |
+
+**POST /api/auth/login**: Accepts `{ username: string, password: string }`. Returns `{ token: string }` on success, 401 on invalid credentials. This endpoint is anonymous (no token required).
+
+**Token authentication**: All other API endpoints (except `/healthz`, `/openapi`, `/scalar`) require `Authorization: Bearer <token>` header. Configured via `Authentication` section in `appsettings.json` or env vars (`Authentication__Username`, `Authentication__Password`, `Authentication__ApiToken`).
 
 ## Health
 

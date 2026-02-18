@@ -22,7 +22,7 @@ public class ClassificationControllerTests : IDisposable
 
     public ClassificationControllerTests()
     {
-        _client = _factory.CreateClient();
+        _client = _factory.CreateAuthenticatedClient();
         _service = _factory.ClassificationQueueService;
     }
 

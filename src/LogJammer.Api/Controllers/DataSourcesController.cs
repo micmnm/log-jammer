@@ -1,11 +1,13 @@
 using LogJammer.Api.Dtos;
 using LogJammer.Api.Services;
 using LogJammer.Core.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LogJammer.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class DataSourcesController(
     IDataSourceService dataSourceService,

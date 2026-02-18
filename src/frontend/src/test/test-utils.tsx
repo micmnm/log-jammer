@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import theme from '../theme';
 import { NotificationProvider } from '../contexts/NotificationContext';
+import { AuthProvider } from '../contexts/AuthContext';
 
 function createTestQueryClient() {
   return new QueryClient({
@@ -27,7 +28,9 @@ function AllProviders({ children }: ProvidersProps) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <NotificationProvider>
-          <MemoryRouter>{children}</MemoryRouter>
+          <AuthProvider>
+            <MemoryRouter>{children}</MemoryRouter>
+          </AuthProvider>
         </NotificationProvider>
       </ThemeProvider>
     </QueryClientProvider>

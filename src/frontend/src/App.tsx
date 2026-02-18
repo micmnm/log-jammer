@@ -1,9 +1,10 @@
 import { useRef } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query';
 import theme from './theme';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ApiRequestError } from './api/client';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -13,7 +14,14 @@ import Alerts from './pages/Alerts';
 import Classification from './pages/Classification';
 import DataSources from './pages/DataSources';
 import Settings from './pages/Settings';
+import Login from './pages/Login';
 import NotFound from './pages/NotFound';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
 
 function AppInner() {
   const { showNotification } = useNotification();
@@ -46,7 +54,14 @@ function AppInner() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route element={<Layout />}>
+          <Route path="/login" element={<Login />} />
+          <Route
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
             <Route path="/" element={<Dashboard />} />
             <Route path="/error-groups" element={<ErrorGroups />} />
             <Route path="/error-groups/:id" element={<ErrorGroupDetail />} />
@@ -67,7 +82,9 @@ export default function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <NotificationProvider>
-        <AppInner />
+        <AuthProvider>
+          <AppInner />
+        </AuthProvider>
       </NotificationProvider>
     </ThemeProvider>
   );

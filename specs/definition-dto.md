@@ -1,5 +1,22 @@
 # Definition DTO
 
+## Authentication
+
+### AuthSettings
+`LogJammer.Api.Auth.AuthSettings`
+- `Username` (string, default: "admin")
+- `Password` (string, default: "changeme")
+- `ApiToken` (string, default: random GUID)
+
+### LoginRequest
+`LogJammer.Api.Auth.LoginRequest` (record)
+- `Username` (string)
+- `Password` (string)
+
+### LoginResponse
+`LogJammer.Api.Auth.LoginResponse` (record)
+- `Token` (string)
+
 ## Enums
 
 ### ErrorSeverity

@@ -1,4 +1,5 @@
 const BASE_URL = '/api';
+const TOKEN_KEY = 'logjammer_token';
 
 export class ApiRequestError extends Error {
   readonly status: number;
@@ -15,13 +16,25 @@ export class ApiRequestError extends Error {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string>),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
     ...options,
+    headers,
   });
+
+  if (response.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    window.location.href = '/login';
+    throw new ApiRequestError(401, 'Unauthorized', 'Session expired. Please log in again.');
+  }
 
   if (!response.ok) {
     let title = response.statusText;

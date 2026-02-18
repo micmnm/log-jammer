@@ -1,6 +1,8 @@
+using LogJammer.Api.Auth;
 using LogJammer.Infrastructure.Data;
 using LogJammer.Infrastructure.Data.Seeding;
 using LogJammer.Infrastructure.Extensions;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using Serilog;
@@ -81,6 +83,12 @@ try
     // ProblemDetails (RFC 7807) for structured error responses
     builder.Services.AddProblemDetails();
 
+    // Authentication
+    builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("Authentication"));
+    builder.Services.AddAuthentication("Bearer")
+        .AddScheme<AuthenticationSchemeOptions, TokenAuthenticationHandler>("Bearer", null);
+    builder.Services.AddAuthorization();
+
     // Controllers
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
@@ -120,6 +128,9 @@ try
     });
 
     app.UseCors("DevCors");
+
+    app.UseAuthentication();
+    app.UseAuthorization();
 
     app.UseDefaultFiles();
     app.UseStaticFiles();

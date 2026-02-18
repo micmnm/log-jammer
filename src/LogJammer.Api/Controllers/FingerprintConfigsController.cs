@@ -1,10 +1,12 @@
 using LogJammer.Api.Dtos;
 using LogJammer.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LogJammer.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/datasources/{dataSourceId:guid}/fingerprint-configs")]
 public class FingerprintConfigsController(IFingerprintConfigService configService) : ControllerBase
 {

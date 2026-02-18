@@ -21,7 +21,9 @@ import StorageIcon from '@mui/icons-material/Storage';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const DRAWER_WIDTH = 240;
 const DRAWER_WIDTH_COLLAPSED = 64;
@@ -89,6 +91,7 @@ export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: 
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const isCollapsed = !isMobile && collapsed;
   const currentWidth = isCollapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH;
@@ -201,38 +204,45 @@ export default function Sidebar({ open, collapsed, onClose, onToggleCollapse }: 
         {configItems.map(renderNavItem)}
       </List>
 
-      {/* Collapse toggle */}
-      {!isMobile && (
-        <Box sx={{ borderTop: '1px solid rgba(0, 229, 255, 0.08)' }}>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: isCollapsed ? 'center' : 'space-between',
-              px: isCollapsed ? 0 : 2,
-              py: 1,
-            }}
-          >
-            {!isCollapsed && (
-              <Typography
-                variant="caption"
-                sx={{
-                  fontFamily: theme.fontFamilyMono,
-                  fontSize: '0.6rem',
-                  color: 'text.secondary',
-                  opacity: 0.5,
-                  letterSpacing: '0.1em',
-                }}
-              >
-                v0.1.0
-              </Typography>
+      {/* Logout + Collapse toggle */}
+      <Box sx={{ borderTop: '1px solid rgba(0, 229, 255, 0.08)' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isCollapsed ? 'center' : 'space-between',
+            px: isCollapsed ? 0 : 2,
+            py: 1,
+          }}
+        >
+          {!isCollapsed && (
+            <Typography
+              variant="caption"
+              sx={{
+                fontFamily: theme.fontFamilyMono,
+                fontSize: '0.6rem',
+                color: 'text.secondary',
+                opacity: 0.5,
+                letterSpacing: '0.1em',
+              }}
+            >
+              v0.1.0
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title="Logout" placement="top" arrow>
+              <IconButton size="small" onClick={logout} sx={{ color: 'text.secondary' }}>
+                <LogoutIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            {!isMobile && (
+              <IconButton size="small" onClick={onToggleCollapse} sx={{ color: 'text.secondary' }}>
+                {isCollapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+              </IconButton>
             )}
-            <IconButton size="small" onClick={onToggleCollapse} sx={{ color: 'text.secondary' }}>
-              {isCollapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-            </IconButton>
           </Box>
         </Box>
-      )}
+      </Box>
     </Box>
   );
 

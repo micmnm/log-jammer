@@ -1,3 +1,4 @@
+using LogJammer.Api.Auth;
 using LogJammer.Api.Services;
 using LogJammer.Infrastructure.Data;
 using LogJammer.Infrastructure.Pipeline;
@@ -18,6 +19,10 @@ namespace LogJammer.Tests;
 /// </summary>
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
+    public const string TestToken = "test-api-token";
+    public const string TestUsername = "test";
+    public const string TestPassword = "test";
+
     public IDataSourceService DataSourceService { get; } = Substitute.For<IDataSourceService>();
     public IErrorGroupService ErrorGroupService { get; } = Substitute.For<IErrorGroupService>();
     public ITagService TagService { get; } = Substitute.For<ITagService>();
@@ -67,6 +72,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Remove background hosted services (they depend on real repositories)
             services.RemoveAll<IHostedService>();
 
+            // Configure test auth credentials
+            services.Configure<AuthSettings>(opts =>
+            {
+                opts.Username = TestUsername;
+                opts.Password = TestPassword;
+                opts.ApiToken = TestToken;
+            });
+
             // Clear existing health check registrations (NpgSql) — PostConfigure
             // ensures this runs after all Configure actions (including AddNpgSql's)
             services.PostConfigure<HealthCheckServiceOptions>(options =>
@@ -74,5 +87,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 options.Registrations.Clear();
             });
         });
+    }
+
+    public HttpClient CreateAuthenticatedClient()
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestToken);
+        return client;
     }
 }
