@@ -113,6 +113,7 @@ export interface DataSourceResponse {
   schemaMapping: string | null;
   samplingBudget: number;
   enabled: boolean;
+  lastIngestAt: string | null;
   createdAt: string;
   updatedAt: string;
   fingerprintConfigs: FingerprintConfigResponse[];

@@ -20,6 +20,7 @@ public class DataSourceConfiguration : IEntityTypeConfiguration<DataSource>
         builder.Property(e => e.SchemaMapping).HasColumnName("schema_mapping").HasColumnType("jsonb");
         builder.Property(e => e.SamplingBudget).HasColumnName("sampling_budget");
         builder.Property(e => e.Enabled).HasColumnName("enabled");
+        builder.Property(e => e.LastIngestAt).HasColumnName("last_ingest_at");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");
         builder.Property(e => e.UpdatedAt).HasColumnName("updated_at");
     }

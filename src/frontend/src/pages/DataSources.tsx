@@ -22,6 +22,7 @@ import {
   FormControlLabel,
   CircularProgress,
   Divider,
+  Tooltip,
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import EditIcon from '@mui/icons-material/Edit';
@@ -41,6 +42,20 @@ import type { DataSourceResponse, ConnectionTestResponse } from '../api/types';
 import DataSourceDialog from '../components/DataSourceDialog';
 import SchemaMappingDialog from '../components/SchemaMappingDialog';
 import FingerprintConfigDialog from '../components/FingerprintConfigDialog';
+
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
 
 export default function DataSources() {
   const { data: dataSources, isLoading } = useDataSources();
@@ -124,6 +139,7 @@ export default function DataSources() {
                 <TableCell>Enabled</TableCell>
                 <TableCell>Poll Interval</TableCell>
                 <TableCell>Sampling Budget</TableCell>
+                <TableCell>Last Ingest</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -139,6 +155,19 @@ export default function DataSources() {
                   </TableCell>
                   <TableCell sx={{ fontFamily: (theme) => theme.fontFamilyMono }}>{ds.pollIntervalSeconds}s</TableCell>
                   <TableCell sx={{ fontFamily: (theme) => theme.fontFamilyMono }}>{ds.samplingBudget}</TableCell>
+                  <TableCell>
+                    {ds.lastIngestAt ? (
+                      <Tooltip title={new Date(ds.lastIngestAt).toLocaleString()} arrow>
+                        <Typography variant="body2" sx={{ cursor: 'default', fontFamily: (theme) => theme.fontFamilyMono, fontSize: '0.8rem' }}>
+                          {formatRelativeTime(ds.lastIngestAt)}
+                        </Typography>
+                      </Tooltip>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+                        Never
+                      </Typography>
+                    )}
+                  </TableCell>
                   <TableCell align="right">
                     <IconButton size="small" onClick={() => handleEdit(ds)} title="Edit">
                       <EditIcon fontSize="small" />
@@ -165,7 +194,7 @@ export default function DataSources() {
               ))}
               {dataSources?.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={7} align="center">
                     <Typography variant="body2" color="text.secondary">
                       No data sources configured.
                     </Typography>

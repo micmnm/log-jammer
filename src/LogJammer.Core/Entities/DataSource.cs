@@ -12,6 +12,7 @@ public class DataSource
     public string? SchemaMapping { get; set; } // JSON
     public int SamplingBudget { get; set; } = 500;
     public bool Enabled { get; set; } = true;
+    public DateTime? LastIngestAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

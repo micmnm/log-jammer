@@ -57,6 +57,7 @@ public record DataSourceResponse
     public string? SchemaMapping { get; init; }
     public int SamplingBudget { get; init; }
     public bool Enabled { get; init; }
+    public DateTime? LastIngestAt { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
     public IReadOnlyList<FingerprintConfigResponse> FingerprintConfigs { get; init; } = [];

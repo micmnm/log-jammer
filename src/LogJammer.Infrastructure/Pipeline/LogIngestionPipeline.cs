@@ -115,6 +115,13 @@ public class LogIngestionPipeline(
             }
         }
 
+        if (accepted + duplicates > 0)
+        {
+            dataSource.LastIngestAt = DateTime.UtcNow;
+            dbContext.DataSources.Update(dataSource);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
         return new IngestionResult(accepted, duplicates, failed);
     }
 

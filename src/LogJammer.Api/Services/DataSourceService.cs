@@ -148,6 +148,7 @@ public class DataSourceService(
         SchemaMapping = ds.SchemaMapping,
         SamplingBudget = ds.SamplingBudget,
         Enabled = ds.Enabled,
+        LastIngestAt = ds.LastIngestAt,
         CreatedAt = ds.CreatedAt,
         UpdatedAt = ds.UpdatedAt,
         FingerprintConfigs = ds.FingerprintConfigs?.Select(fc => new FingerprintConfigResponse
