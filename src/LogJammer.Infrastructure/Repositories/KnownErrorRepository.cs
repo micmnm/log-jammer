@@ -3,6 +3,7 @@ using LogJammer.Core.Enums;
 using LogJammer.Core.Interfaces;
 using LogJammer.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Pgvector.EntityFrameworkCore;
 
 namespace LogJammer.Infrastructure.Repositories;
 
@@ -120,6 +121,28 @@ public class KnownErrorRepository(LogJammerDbContext context) : IKnownErrorRepos
         context.KnownErrors.Remove(source);
 
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<(KnownError? Match, double Similarity)> FindNearestByEmbeddingAsync(
+        float[] embedding, double threshold, CancellationToken cancellationToken = default)
+    {
+        var vector = new Pgvector.Vector(embedding);
+
+        var nearest = await context.KnownErrors
+            .Where(e => e.EmbeddingVector != null)
+            .OrderBy(e => e.EmbeddingVector!.CosineDistance(vector))
+            .Select(e => new { Error = e, Distance = e.EmbeddingVector!.CosineDistance(vector) })
+            .Take(1)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (nearest is null)
+            return (null, 0);
+
+        var similarity = 1.0 - nearest.Distance;
+        if (similarity < threshold)
+            return (null, similarity);
+
+        return (nearest.Error, similarity);
     }
 
     private IQueryable<KnownError> BuildFilterQuery(Guid? dataSourceId, ErrorStatus? status, ErrorSeverity? severity)

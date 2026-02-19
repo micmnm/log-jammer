@@ -23,4 +23,6 @@ public interface IKnownErrorRepository
     Task UpdateAsync(KnownError knownError, CancellationToken cancellationToken = default);
     Task<KnownError?> GetByFingerprintAliasAsync(string fingerprintHash, CancellationToken cancellationToken = default);
     Task MergeIntoAsync(Guid sourceKnownErrorId, Guid targetKnownErrorId, CancellationToken cancellationToken = default);
+    Task<(KnownError? Match, double Similarity)> FindNearestByEmbeddingAsync(
+        float[] embedding, double threshold, CancellationToken cancellationToken = default);
 }

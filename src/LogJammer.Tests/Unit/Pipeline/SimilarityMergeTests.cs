@@ -194,6 +194,53 @@ public class SimilarityMergeTests : IAsyncLifetime
         targetAfter.TotalOccurrences.Should().Be(8); // 5 + 3
     }
 
+    [SkippableFact]
+    public async Task FindNearestByEmbeddingAsync_ReturnsMatch_WhenAboveThreshold()
+    {
+        var target = await CreateKnownError("hash-embed-target", "Target error");
+
+        // Store a known embedding on target
+        var fakeEmbedding = new float[384];
+        fakeEmbedding[0] = 1.0f; // unit vector along dim 0
+        target.EmbeddingVector = new Pgvector.Vector(fakeEmbedding);
+        _context.KnownErrors.Update(target);
+        await _context.SaveChangesAsync();
+
+        // Search with a very similar vector
+        var queryEmbedding = new float[384];
+        queryEmbedding[0] = 0.99f;
+        queryEmbedding[1] = 0.01f;
+        // Normalize
+        var norm = (float)Math.Sqrt(queryEmbedding.Sum(v => v * v));
+        for (int i = 0; i < queryEmbedding.Length; i++) queryEmbedding[i] /= norm;
+
+        var (match, similarity) = await _repo.FindNearestByEmbeddingAsync(queryEmbedding, 0.80);
+
+        match.Should().NotBeNull();
+        match!.Id.Should().Be(target.Id);
+        similarity.Should().BeGreaterThan(0.80);
+    }
+
+    [SkippableFact]
+    public async Task FindNearestByEmbeddingAsync_ReturnsNull_WhenBelowThreshold()
+    {
+        var target = await CreateKnownError("hash-embed-far", "Target error");
+
+        var fakeEmbedding = new float[384];
+        fakeEmbedding[0] = 1.0f;
+        target.EmbeddingVector = new Pgvector.Vector(fakeEmbedding);
+        _context.KnownErrors.Update(target);
+        await _context.SaveChangesAsync();
+
+        // Completely different vector
+        var queryEmbedding = new float[384];
+        queryEmbedding[383] = 1.0f;
+
+        var (match, similarity) = await _repo.FindNearestByEmbeddingAsync(queryEmbedding, 0.80);
+
+        match.Should().BeNull();
+    }
+
     private async Task<KnownError> CreateKnownError(string hash, string message)
     {
         var error = new KnownError
