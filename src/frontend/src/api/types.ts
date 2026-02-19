@@ -70,6 +70,8 @@ export interface ClassificationQueueResponse {
   lastSeen: string;
   totalOccurrences: number;
   createdAt: string;
+  dataSourceId: string | null;
+  dataSourceName: string | null;
 }
 
 export interface TagSuggestionResponse {

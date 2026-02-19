@@ -19,6 +19,7 @@ import {
   Box,
   Paper,
   LinearProgress,
+  Tooltip,
   createFilterOptions,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -27,6 +28,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import LabelIcon from '@mui/icons-material/Label';
 import StarIcon from '@mui/icons-material/Star';
+import StorageIcon from '@mui/icons-material/Storage';
 import { useApproveClassification, useRejectClassification } from '../api/hooks/useClassification';
 import { useTags, useCreateTag } from '../api/hooks/useTags';
 import type { ClassificationQueueResponse, TagResponse } from '../api/types';
@@ -207,9 +209,30 @@ export default function ClassificationQueueCard({ item }: ClassificationQueueCar
                 border: `1px solid ${severityColor}40`,
               }}
             />
-            <Typography variant="caption" color="text.secondary">
-              First seen {formatRelativeTime(item.firstSeen)}
-            </Typography>
+            {item.dataSourceName && (
+              <>
+                <Chip
+                  icon={<StorageIcon sx={{ fontSize: 14 }} />}
+                  label={item.dataSourceName}
+                  size="small"
+                  sx={{
+                    height: 20,
+                    fontSize: '0.7rem',
+                    fontWeight: 500,
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    color: 'text.secondary',
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  &middot;
+                </Typography>
+              </>
+            )}
+            <Tooltip title={new Date(item.firstSeen).toLocaleString()} arrow>
+              <Typography variant="caption" color="text.secondary" sx={{ cursor: 'default' }}>
+                First seen {formatRelativeTime(item.firstSeen)}
+              </Typography>
+            </Tooltip>
             <Typography variant="caption" color="text.secondary">
               &middot;
             </Typography>

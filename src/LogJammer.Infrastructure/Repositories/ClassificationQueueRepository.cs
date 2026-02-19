@@ -12,6 +12,7 @@ public class ClassificationQueueRepository(LogJammerDbContext context) : IClassi
         return await context.ClassificationQueue
             .Where(q => !q.Reviewed)
             .Include(q => q.KnownError)
+                .ThenInclude(ke => ke.DataSource)
             .OrderByDescending(q => q.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -30,6 +31,7 @@ public class ClassificationQueueRepository(LogJammerDbContext context) : IClassi
     {
         return await context.ClassificationQueue
             .Include(q => q.KnownError)
+                .ThenInclude(ke => ke.DataSource)
             .FirstOrDefaultAsync(q => q.Id == id, cancellationToken);
     }
 

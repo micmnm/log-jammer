@@ -16,6 +16,8 @@ public class ClassificationQueueResponse
     public DateTime LastSeen { get; set; }
     public long TotalOccurrences { get; set; }
     public DateTime CreatedAt { get; set; }
+    public Guid? DataSourceId { get; set; }
+    public string? DataSourceName { get; set; }
 }
 
 public class TagSuggestionResponse

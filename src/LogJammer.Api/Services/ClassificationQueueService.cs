@@ -191,7 +191,9 @@ public class ClassificationQueueService(
             FirstSeen = item.KnownError?.FirstSeen ?? item.CreatedAt,
             LastSeen = item.KnownError?.LastSeen ?? item.CreatedAt,
             TotalOccurrences = item.KnownError?.TotalOccurrences ?? 0,
-            CreatedAt = item.CreatedAt
+            CreatedAt = item.CreatedAt,
+            DataSourceId = item.KnownError?.DataSourceId,
+            DataSourceName = item.KnownError?.DataSource?.Name
         };
     }
 }
