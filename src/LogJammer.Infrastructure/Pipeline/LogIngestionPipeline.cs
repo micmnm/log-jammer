@@ -1,8 +1,10 @@
+using System.Globalization;
 using LogJammer.Core.Entities;
 using LogJammer.Core.Enums;
 using LogJammer.Core.Interfaces;
 using LogJammer.Core.Models;
 using LogJammer.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace LogJammer.Infrastructure.Pipeline;
@@ -28,6 +30,9 @@ public class LogIngestionPipeline(
         int duplicates = 0;
         int failed = 0;
 
+        // Cache embedding config for the batch to avoid per-entry DB reads
+        var (embeddingEnabled, similarityThreshold) = await LoadEmbeddingConfigAsync(cancellationToken);
+
         foreach (var entry in entries)
         {
             try
@@ -41,10 +46,10 @@ public class LogIngestionPipeline(
                 var matchedByEmbedding = false;
                 Pgvector.Vector? computedEmbedding = null;
 
-                // Embedding-based similarity fallback
-                if (knownError is null)
+                // Embedding-based similarity fallback (uses batch-cached config)
+                if (knownError is null && embeddingEnabled)
                 {
-                    (knownError, computedEmbedding) = await TryFindByEmbeddingSimilarityAsync(mapped, cancellationToken);
+                    (knownError, computedEmbedding) = await TryFindByEmbeddingSimilarityAsync(mapped, similarityThreshold, cancellationToken);
                     matchedByEmbedding = knownError is not null;
                 }
 
@@ -83,12 +88,17 @@ public class LogIngestionPipeline(
                     // Create alias if matched by embedding (so future lookups are fast)
                     if (matchedByEmbedding)
                     {
-                        dbContext.FingerprintAliases.Add(new FingerprintAlias
+                        var aliasExists = await dbContext.FingerprintAliases
+                            .AnyAsync(a => a.FingerprintHash == fingerprint, cancellationToken);
+                        if (!aliasExists)
                         {
-                            FingerprintHash = fingerprint,
-                            KnownErrorId = knownError.Id
-                        });
-                        await dbContext.SaveChangesAsync(cancellationToken);
+                            dbContext.FingerprintAliases.Add(new FingerprintAlias
+                            {
+                                FingerprintHash = fingerprint,
+                                KnownErrorId = knownError.Id
+                            });
+                            await dbContext.SaveChangesAsync(cancellationToken);
+                        }
                     }
 
                     duplicates++;
@@ -108,20 +118,23 @@ public class LogIngestionPipeline(
         return new IngestionResult(accepted, duplicates, failed);
     }
 
-    private async Task<(KnownError? match, Pgvector.Vector? embedding)> TryFindByEmbeddingSimilarityAsync(
-        MappedLogEntry mapped, CancellationToken ct)
+    private async Task<(bool enabled, double threshold)> LoadEmbeddingConfigAsync(CancellationToken ct)
     {
-        // Check feature flag
         var enabledConfig = await configRepo.GetAsync("IngestionSimilarityEnabled", ct);
         if (enabledConfig is null || !bool.TryParse(enabledConfig.Value, out var enabled) || !enabled)
-            return (null, null);
+            return (false, 0.80);
 
-        // Load threshold
         var thresholdConfig = await configRepo.GetAsync("IngestionSimilarityThreshold", ct);
         var threshold = 0.80;
-        if (thresholdConfig is not null && double.TryParse(thresholdConfig.Value, out var t))
+        if (thresholdConfig is not null && double.TryParse(thresholdConfig.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var t))
             threshold = t;
 
+        return (true, threshold);
+    }
+
+    private async Task<(KnownError? match, Pgvector.Vector? embedding)> TryFindByEmbeddingSimilarityAsync(
+        MappedLogEntry mapped, double threshold, CancellationToken ct)
+    {
         // Normalize text for better embedding input
         var text = FingerprintNormalizer.Normalize(mapped.Message);
         if (!string.IsNullOrWhiteSpace(mapped.StackTrace))
