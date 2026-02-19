@@ -79,4 +79,50 @@ public class FingerprintNormalizerTests
         var result = FingerprintNormalizer.Normalize(input);
         result.Should().Be("error at for user at");
     }
+
+    [Fact]
+    public void Normalize_StripsDoubleQuotes()
+    {
+        var input = "BusMessageId: \"550e8400-e29b-41d4-a716-446655440000\"";
+        var result = FingerprintNormalizer.Normalize(input);
+        result.Should().NotContain("\"");
+    }
+
+    [Fact]
+    public void Normalize_StripsSingleQuotes()
+    {
+        var input = "Error in 'UserService'";
+        var result = FingerprintNormalizer.Normalize(input);
+        result.Should().NotContain("'");
+    }
+
+    [Fact]
+    public void Normalize_StripsKeyValueLabels()
+    {
+        var input = "BusMessageId: value, BusCorrelationId: value2";
+        var result = FingerprintNormalizer.Normalize(input);
+        result.Should().NotContain("busmessageid");
+        result.Should().NotContain("buscorrelationid");
+    }
+
+    [Fact]
+    public void Normalize_StripsHttpStatusCodePrefixes()
+    {
+        var input = "502:BadGateway:Bad Gateway:Request failed";
+        var result = FingerprintNormalizer.Normalize(input);
+        result.Should().NotContain("502");
+        result.Should().Contain("request failed");
+    }
+
+    [Fact]
+    public void Normalize_FormattingVariants_ProduceSameOutput()
+    {
+        var msg1 = "BusMessageId: 92c850e9-667b-4acb-921b-0a5d9c3560e5, CorrelationId: aa96e498-5632-41ea-9d66-5135f9d87ca1, Request failed with status code BadGateway(Request host is example.ngrok-free.dev)";
+        var msg2 = "BusMessageId: \"92c850e9-667b-4acb-921b-0a5d9c3560e5\", BusCorrelationId: \"aa96e498-5632-41ea-9d66-5135f9d87ca1\", \"502:BadGateway:Bad Gateway:Request failed with status code BadGateway(Request host is example.ngrok-free.dev)\"";
+
+        var result1 = FingerprintNormalizer.Normalize(msg1);
+        var result2 = FingerprintNormalizer.Normalize(msg2);
+
+        result1.Should().Be(result2);
+    }
 }

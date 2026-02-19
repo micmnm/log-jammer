@@ -11,6 +11,15 @@ public static partial class FingerprintNormalizer
 
         var result = input;
 
+        // Strip quotes (must run before UUID stripping so quoted UUIDs are cleaned)
+        result = QuoteRegex().Replace(result, "");
+
+        // Strip key-value label prefixes (BusMessageId:, CorrelationId:, etc.)
+        result = KeyValueLabelRegex().Replace(result, "");
+
+        // Strip HTTP status code prefixes (502:BadGateway:Bad Gateway:)
+        result = HttpStatusCodePrefixRegex().Replace(result, "");
+
         // Strip ISO timestamps (2024-01-15T10:30:45.123Z)
         result = IsoTimestampRegex().Replace(result, "");
 
@@ -33,6 +42,15 @@ public static partial class FingerprintNormalizer
 
         return result;
     }
+
+    [GeneratedRegex(@"[""']")]
+    private static partial Regex QuoteRegex();
+
+    [GeneratedRegex(@"\b\w*(?:[Ii]d|[Cc]orrelation[Ii]d|[Mm]essage[Ii]d)\s*:\s*")]
+    private static partial Regex KeyValueLabelRegex();
+
+    [GeneratedRegex(@"\b\d{3}:[A-Za-z]+(?::[A-Za-z ]+)*:")]
+    private static partial Regex HttpStatusCodePrefixRegex();
 
     [GeneratedRegex(@"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[\.\d]*Z?")]
     private static partial Regex IsoTimestampRegex();
