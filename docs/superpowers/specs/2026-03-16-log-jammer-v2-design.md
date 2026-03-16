@@ -11,13 +11,12 @@ V1 was over-engineered (15+ entities, ONNX embeddings, pgvector, complex classif
 - Detect new error patterns as they appear
 - Show per-pattern message rates vs historical baseline ("47/hr now, usually ~5/hr")
 - Ingest from Kibana (restricted access) and Elasticsearch (direct)
-- Stay lean: 4 entities, 2 projects, ~10 endpoints, 3 frontend pages
+- Stay lean: 5 entities, 2 projects, ~12 endpoints, 3 frontend pages
 
 ## Non-Goals
 
 - Alerting / notification system (future)
 - ML classification, embeddings, tag management
-- Auth system (future)
 - Log file adapter, PostgreSQL adapter (future)
 - Adaptive sampling
 
@@ -58,7 +57,8 @@ V1 was over-engineered (15+ entities, ONNX embeddings, pgvector, complex classif
 +------------------------------------------------+
 |  PostgreSQL                                     |
 |  - log_patterns, pattern_occurrences,           |
-|    pattern_baselines, data_sources              |
+|    pattern_baselines, data_sources,             |
+|    drain_states                                 |
 +------------------------------------------------+
 ```
 
@@ -86,6 +86,17 @@ No Core/Infrastructure split. No repository pattern. Engine uses EF Core directl
 | CreatedAt | DateTimeOffset | |
 | LastPolledAt | DateTimeOffset? | |
 
+### DrainState
+
+| Field | Type | Notes |
+|-------|------|-------|
+| Id | Guid | PK |
+| DataSourceId | Guid | FK to DataSource (unique) |
+| SerializedState | byte[] | Drain parse tree, serialized. Expected size: ~1-5 KB per 100 clusters. |
+| UpdatedAt | DateTimeOffset | Last time state was persisted |
+
+One DrainParser instance per DataSource. Each data source gets its own parse tree so patterns from different sources don't bleed into each other. State is persisted after each ingestion batch and restored on startup.
+
 **ConnectionConfig by type:**
 
 - **Elasticsearch:** `{ url, indexPattern, auth? { username, password }, pollingIntervalSeconds }`
@@ -97,11 +108,11 @@ No Core/Infrastructure split. No repository pattern. Engine uses EF Core directl
 |-------|------|-------|
 | Id | Guid | PK |
 | Template | string | Drain-extracted pattern, e.g., `"payment-service \| TimeoutException \| Connection to * timed out after *ms"` |
-| ClusterId | int | Drain's internal cluster ID |
+| ClusterId | int | Drain's internal cluster ID. Used for fast lookup during ingestion; Template string is the canonical identity. If Drain evicts a cluster, the LogPattern row remains (orphaned from Drain tree but still queryable). |
 | FirstSeen | DateTimeOffset | |
 | LastSeen | DateTimeOffset | |
 | SampleMessage | string | One real log line that matched |
-| Severity | enum | Info, Warning, Error, Critical (from log level) |
+| Severity | enum | Info, Warning, Error, Critical. Mapped from log level: Debug/Trace→Info, Warn/Warning→Warning, Error→Error, Fatal/Critical→Critical. Unknown/null→Info. |
 | DataSourceId | Guid | FK to DataSource |
 | IsNew | bool | True until user acknowledges |
 
@@ -116,6 +127,8 @@ No Core/Infrastructure split. No repository pattern. Engine uses EF Core directl
 | Count | long | Messages in this window |
 
 Index: `(PatternId, WindowStart)` unique.
+
+Windows are clock-aligned to UTC hours (e.g., 14:00-15:00 UTC). Hour-of-week calculations in PatternBaseline also use UTC.
 
 ### PatternBaseline
 
@@ -149,13 +162,17 @@ C# port of the Drain3 algorithm (IBM). Builds a fixed-depth parse tree from log 
 - `MaxClusters` (int, default 1000) — max clusters before eviction
 - `TreeDepth` (int, default 4) — parse tree depth
 
-State persists to DB so patterns survive application restarts.
+**Scoping:** One DrainParser instance per DataSource. Patterns from different sources stay isolated. State serialized to `DrainState` table after each ingestion batch, restored on startup.
+
+**Eviction policy:** When `MaxClusters` is reached, the least recently matched cluster is evicted (LRU). The corresponding LogPattern row remains in the database — it just won't receive new matches from Drain. This is acceptable: old patterns stay queryable for historical analysis.
+
+**Concurrency:** IngestionPipeline acquires a per-DataSource lock (in-memory semaphore) so concurrent poll/push for the same source are serialized. Different data sources process in parallel.
 
 ### StackTracePreprocessor
 
-Pre-processes fields that look like stack traces before Drain parsing.
+Pre-processes fields identified as stack traces before Drain parsing.
 
-- Detects stack trace fields by heuristic (contains `at `, `in `, frame-like patterns)
+- Detects stack trace fields **by field name**: field name contains "stack", "trace", or "exception" (case-insensitive). Does NOT use content heuristics to avoid false positives on normal messages.
 - Extracts top 3 frames
 - Strips line numbers, memory addresses, file paths
 - Returns cleaned summary: `"at PaymentService.Process > DatabaseClient.Execute > NpgsqlConnection.Open"`
@@ -208,10 +225,12 @@ Runs as a background task every hour.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | /api/datasources | List all data sources |
+| GET | /api/datasources/{id} | Get single data source |
 | POST | /api/datasources | Create data source |
 | PUT | /api/datasources/{id} | Update data source |
 | DELETE | /api/datasources/{id} | Delete data source |
 | POST | /api/datasources/{id}/test | Test connection (ES only) |
+| GET | /api/datasources/{id}/fields | Discover available fields from ES index (for message template picker). Runs a sample query, returns union of _source field names. |
 
 ### Ingest
 
@@ -223,26 +242,63 @@ Runs as a background task every hour.
 ```json
 {
   "entries": [
-    { "message": "combined message string", "timestamp": "2026-03-16T14:32:01Z", "level": "Error" }
+    {
+      "message": "payment-service | TimeoutException | Connection to db timed out after 5000ms",
+      "timestamp": "2026-03-16T14:32:01Z",
+      "level": "Error"
+    }
   ]
 }
 ```
 
-Used by Chrome extension. The extension applies the message template and sends pre-combined messages.
+The Chrome extension applies the message template client-side: it extracts the user-selected fields from each ES hit, combines them per the template, and sends the pre-combined `message` string. The backend does NOT need field-level knowledge for push ingest — it receives ready-to-parse messages.
+
+For Elasticsearch polling, the backend applies the message template server-side (it has access to the raw ES response fields).
 
 ### Patterns
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/patterns | List patterns. Filters: dataSourceId, severity, isNew, timeRange. Returns template, severity, firstSeen, lastSeen, currentRate, expectedRate, deviation. |
+| GET | /api/patterns | List patterns. Filters: dataSourceId, severity, isNew, timeRange. Paginated (page, pageSize, default 50). Returns template, severity, firstSeen, lastSeen, currentRate, expectedRate, deviation. |
 | GET | /api/patterns/{id} | Pattern detail: template, sample message, occurrence history, baseline comparison chart data. |
 | POST | /api/patterns/{id}/acknowledge | Mark pattern as not new. |
+| POST | /api/patterns/acknowledge-all | Bulk acknowledge all new patterns. Optional filter: dataSourceId. |
 
 ### Dashboard
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/dashboard | Summary: new pattern count, top anomalies (highest sigma deviation), total patterns, ingestion rate. |
+| GET | /api/dashboard | Summary object (see below). |
+
+**Dashboard response:**
+```json
+{
+  "totalPatterns": 142,
+  "newPatternCount": 3,
+  "ingestionRatePerHour": 12450,
+  "topAnomalies": [
+    {
+      "patternId": "guid",
+      "template": "payment-service | TimeoutException | Connection to * timed out...",
+      "severity": "Error",
+      "currentRate": 47,
+      "expectedRate": 5.2,
+      "stdDevsFromMean": 8.4,
+      "dataSourceName": "prod-kibana"
+    }
+  ],
+  "newPatterns": [
+    {
+      "patternId": "guid",
+      "template": "...",
+      "severity": "Warning",
+      "firstSeen": "2026-03-16T14:00:00Z",
+      "dataSourceName": "prod-kibana"
+    }
+  ]
+}
+```
+`topAnomalies`: top 10 by stdDevsFromMean (descending). `newPatterns`: all with IsNew=true, max 50.
 
 ---
 
@@ -250,17 +306,27 @@ Used by Chrome extension. The extension applies the message template and sends p
 
 ### ElasticsearchPollingService
 
-- Polls enabled Elasticsearch data sources at configured interval
-- Runs search query against configured index pattern
-- Applies message template to combine fields
-- Feeds entries into IngestionPipeline
-- Tracks `LastPolledAt` and uses time-range filter for incremental polling
+- Polls enabled Elasticsearch data sources at configured interval (from `ConnectionConfig.pollingIntervalSeconds`)
+- Runs `_search` query against configured index pattern with time-range filter (`@timestamp > LastPolledAt`)
+- Fetches `_source` fields from hits, applies MessageTemplate server-side to combine selected fields into a single message string
+- Auto-detects timestamp and level fields from hits (same logic as Chrome extension)
+- Feeds combined entries into IngestionPipeline
+- Updates `LastPolledAt` after successful poll
+
+**Field discovery** (for message template config in UI): `GET /api/datasources/{id}/fields` runs a sample `_search` (size=10) against the ES index, returns union of all `_source` field names with sample values. Frontend uses this to populate the field picker when configuring the message template.
 
 ### BaselineRecalculationService
 
 - Runs every hour
 - Recalculates PatternBaseline for all patterns using last 4 weeks of PatternOccurrence data
 - Computes avg + stddev per hour-of-week slot (168 slots per pattern)
+
+### DataRetentionService
+
+- Runs daily
+- Deletes PatternOccurrence rows older than 6 weeks (baselines use 4 weeks; 2-week buffer)
+- Deletes LogPatterns with no occurrences in the last 6 weeks and IsNew=false (stale patterns)
+- Configurable retention period (default 6 weeks)
 
 ---
 
@@ -295,6 +361,16 @@ Carried forward from v1, simplified.
 - **Level:** auto-detects `log.level`, `level`, `severity` fields from response
 - User does not need to map these manually
 
+### Field Selector Details
+
+The field selector dialog in the Subscribe flow:
+
+- **Field extraction:** Union of all `_source` field keys from the first 10 hits in the captured response. Handles sparse data (some hits may have fields others don't).
+- **Display:** Checkboxes with field names, sample value shown next to each. Auto-detected timestamp/level fields shown as pre-checked and labeled.
+- **Ordering:** Selected fields can be reordered via up/down arrows. Order determines position in the combined message template.
+- **Preview:** Live preview of what the combined message looks like for the first hit, e.g., `"payment-service | TimeoutException | Connection to db timed out after 5000ms"`.
+- **Max fields:** No hard limit, but a soft warning if more than 6 fields selected (Drain works best with concise input).
+
 ### Improvements over v1
 
 - **Per-subscription pause/resume** instead of all-or-nothing session failure
@@ -306,7 +382,7 @@ Carried forward from v1, simplified.
 
 - **Recent Queries** — captured queries list, Subscribe button with field selector dialog
 - **Active Subscriptions** — status per subscription (Active/Paused), pause/resume/delete controls
-- **Settings** — Log Jammer API URL, API token, save button
+- **Settings** — Log Jammer API URL, API token (optional, for future auth), save button. Token is sent as `Authorization: Bearer` header if configured; backend ignores it until auth is implemented.
 
 ---
 
