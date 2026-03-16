@@ -262,7 +262,7 @@ For Elasticsearch polling, the backend applies the message template server-side 
 | GET | /api/patterns | List patterns. Filters: dataSourceId, severity, isNew, timeRange. Paginated (page, pageSize, default 50). Returns template, severity, firstSeen, lastSeen, currentRate, expectedRate, deviation. |
 | GET | /api/patterns/{id} | Pattern detail: template, sample message, occurrence history, baseline comparison chart data. |
 | POST | /api/patterns/{id}/acknowledge | Mark pattern as not new. |
-| POST | /api/patterns/acknowledge-all | Bulk acknowledge all new patterns. Optional filter: dataSourceId. |
+| POST | /api/patterns/acknowledge-all | Bulk acknowledge all new patterns. Optional filter: dataSourceId. Returns `{ acknowledged: int }`. |
 
 ### Dashboard
 
@@ -312,6 +312,7 @@ For Elasticsearch polling, the backend applies the message template server-side 
 - Auto-detects timestamp and level fields from hits (same logic as Chrome extension)
 - Feeds combined entries into IngestionPipeline
 - Updates `LastPolledAt` after successful poll
+- On failure (connection timeout, auth error, index not found): logs error, skips this cycle, retries on next interval. No exponential backoff — keeps it simple. Frontend can see staleness via `LastPolledAt` (if it's old relative to polling interval, something is wrong).
 
 **Field discovery** (for message template config in UI): `GET /api/datasources/{id}/fields` runs a sample `_search` (size=10) against the ES index, returns union of all `_source` field names with sample values. Frontend uses this to populate the field picker when configuring the message template.
 
@@ -326,6 +327,8 @@ For Elasticsearch polling, the backend applies the message template server-side 
 - Runs daily
 - Deletes PatternOccurrence rows older than 6 weeks (baselines use 4 weeks; 2-week buffer)
 - Deletes LogPatterns with no occurrences in the last 6 weeks and IsNew=false (stale patterns)
+- FK cascade deletes handle associated PatternBaseline rows when a LogPattern is deleted
+- DrainState rows are cleaned up when their DataSource is deleted (FK cascade)
 - Configurable retention period (default 6 weeks)
 
 ---
