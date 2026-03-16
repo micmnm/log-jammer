@@ -385,7 +385,7 @@ The field selector dialog in the Subscribe flow:
 
 - **Recent Queries** — captured queries list, Subscribe button with field selector dialog
 - **Active Subscriptions** — status per subscription (Active/Paused), pause/resume/delete controls
-- **Settings** — Log Jammer API URL, API token (optional, for future auth), save button. Token is sent as `Authorization: Bearer` header if configured; backend ignores it until auth is implemented.
+- **Settings** — Log Jammer API URL, API key (required), save button. API key is sent as `X-Api-Key` header on all requests to the backend.
 
 ---
 
@@ -425,6 +425,54 @@ React 19 + Vite + TypeScript 5.9 + MUI 7 + TanStack Query 5 + Chart.js 4.
 
 ---
 
+## Authentication
+
+Simple password + API key scheme. No user accounts, no roles — single shared password for the UI, single API key for programmatic access.
+
+### Configuration
+
+In `appsettings.json`:
+```json
+{
+  "Auth": {
+    "Password": "changeme",
+    "ApiKey": "changeme"
+  }
+}
+```
+
+Overridable via environment variables:
+- `AUTH__PASSWORD` — frontend login password
+- `AUTH__APIKEY` — API key for programmatic access (Chrome extension, direct API calls)
+
+### Frontend Login
+
+- Login page with a single password field (no username)
+- `POST /api/auth/login` with `{ "password": "..." }` — returns `{ "token": "..." }` (a short-lived JWT or opaque session token, stored in localStorage)
+- All subsequent frontend API calls include `Authorization: Bearer {token}` header
+- Token expiry: 24 hours. On 401, redirect to login page.
+
+### API Key Auth (Chrome Extension + External Callers)
+
+- API key sent as `X-Api-Key` header
+- Backend accepts either a valid Bearer token (from login) OR a valid API key on all protected endpoints
+- Chrome extension stores the API key in its Settings tab and sends it on all `/api/ingest` calls
+
+### Backend Middleware
+
+- Auth middleware checks all `/api/*` routes except `POST /api/auth/login`
+- Accepts `Authorization: Bearer {token}` (session) OR `X-Api-Key: {key}` (API key)
+- Returns 401 if neither is valid
+- No rate limiting (future)
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/auth/login | Password login. Returns session token. |
+
+---
+
 ## Tech Stack
 
 | Component | Technology |
@@ -451,7 +499,7 @@ React 19 + Vite + TypeScript 5.9 + MUI 7 + TanStack Query 5 + Chart.js 4.
 - Adaptive sampling
 - Schema mapping (replaced by message template)
 - 4-project solution (Core/Infrastructure/Api/Tests → Engine/Api)
-- Auth system
+- User accounts / roles (replaced by shared password + API key)
 - SampleLog TUI tool
 - PostgreSQL adapter, LogFile adapter
 - 12 of 15+ entities
@@ -464,6 +512,7 @@ React 19 + Vite + TypeScript 5.9 + MUI 7 + TanStack Query 5 + Chart.js 4.
 - Hour-of-week baselines with statistical deviation
 - Field selector in Chrome extension during subscribe
 - Per-subscription error recovery in extension
+- Simple auth: shared password (frontend) + API key (extension/API)
 
 ## What's Carried Forward (Simplified)
 
