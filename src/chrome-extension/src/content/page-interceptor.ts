@@ -89,7 +89,65 @@ function extractSearchEntries(parsed: Record<string, unknown>): SearchEntry[] {
   return [];
 }
 
-function processBody(url: string, bodyText: string): void {
+// --- Sample field extraction from ES response ---
+
+interface FieldSample {
+  name: string;
+  sampleValue: string;
+}
+
+function extractSampleFields(responseData: Record<string, unknown>): FieldSample[] {
+  // Navigate the same nested structure as extractHits in service-worker
+  let hits: Array<Record<string, unknown>> = [];
+
+  const tryExtract = (data: Record<string, unknown>): Array<Record<string, unknown>> => {
+    if (data.hits && typeof data.hits === 'object') {
+      const h = data.hits as Record<string, unknown>;
+      if (Array.isArray(h.hits)) return h.hits as Array<Record<string, unknown>>;
+    }
+    if (data.result && typeof data.result === 'object') return tryExtract(data.result as Record<string, unknown>);
+    if (data.rawResponse && typeof data.rawResponse === 'object') return tryExtract(data.rawResponse as Record<string, unknown>);
+    return [];
+  };
+
+  hits = tryExtract(responseData);
+  if (hits.length === 0 && Array.isArray(responseData)) {
+    for (const item of responseData as Array<Record<string, unknown>>) {
+      const found = tryExtract(item);
+      if (found.length > 0) { hits = found; break; }
+    }
+  }
+
+  // Take first 10 hits to collect field names + sample values
+  const sampleHits = hits.slice(0, 10);
+  const fieldMap = new Map<string, string>();
+
+  for (const hit of sampleHits) {
+    const source = (hit._source as Record<string, unknown> | undefined) ?? {};
+    const fields = hit.fields as Record<string, unknown> | undefined;
+
+    const flatFields: Record<string, unknown> = { ...source };
+    if (fields) {
+      for (const [key, val] of Object.entries(fields)) {
+        flatFields[key] = Array.isArray(val) && val.length === 1 ? val[0] : val;
+      }
+    }
+
+    for (const [key, val] of Object.entries(flatFields)) {
+      if (!fieldMap.has(key) && val !== null && val !== undefined) {
+        fieldMap.set(key, String(val).slice(0, 80));
+      }
+    }
+  }
+
+  return Array.from(fieldMap.entries()).map(([name, sampleValue]) => ({ name, sampleValue }));
+}
+
+function processBody(
+  url: string,
+  bodyText: string,
+  sampleFields?: FieldSample[]
+): void {
   const lines = bodyText.split('\n').filter(Boolean);
   vlog('NDJSON lines:', lines.length);
 
@@ -117,6 +175,7 @@ function processBody(url: string, bodyText: string): void {
               indexPattern: (entry.params.index as string) ?? extractIndexFromUrl(url),
               kibanaUrl: window.location.origin,
               capturedAt: new Date().toISOString(),
+              sampleFields: sampleFields ?? [],
             },
           }, '*');
         }
@@ -238,11 +297,36 @@ async function readBody(url: string, body: BodyInit | null | undefined): Promise
 
     if (method === 'POST' && isKibanaSearchRequest(url)) {
       log('Intercepted search request:', url);
-      vlog('[fetch] body type:', init?.body == null ? 'null' : init.body.constructor.name);
+      vlog('[fetch] body type:', init?.body == null ? 'null' : (init.body as object).constructor.name);
       try {
         const bodyText = await readBody(url, init?.body);
         vlog('[fetch] body text (first 500 chars):', bodyText?.substring(0, 500));
-        if (bodyText) processBody(url, bodyText);
+
+        if (bodyText) {
+          // Make the actual request and capture the response for field extraction
+          const response = await originalFetch.call(this, input, init);
+
+          // Clone the response so we can read it while also returning it to the page
+          const responseClone = response.clone();
+
+          // Async: extract sample fields from response body and then fire the query message
+          responseClone.text().then(responseText => {
+            let sampleFields: FieldSample[] = [];
+            try {
+              const responseData = JSON.parse(responseText) as Record<string, unknown>;
+              sampleFields = extractSampleFields(responseData);
+              vlog('[fetch] extracted', sampleFields.length, 'sample fields from response');
+            } catch {
+              vlog('[fetch] could not parse response for field extraction');
+            }
+            processBody(url, bodyText, sampleFields);
+          }).catch(() => {
+            // If response read fails, still capture query without fields
+            processBody(url, bodyText, []);
+          });
+
+          return response;
+        }
       } catch (err) {
         vlog('[fetch] error reading body:', err);
       }
@@ -275,26 +359,37 @@ async function readBody(url: string, body: BodyInit | null | undefined): Promise
 
     if (method.toUpperCase() === 'POST' && isKibanaSearchRequest(url)) {
       log('Intercepted XHR search request:', url);
-      vlog('[XHR] body type:', body == null ? 'null' : body.constructor.name);
+      vlog('[XHR] body type:', body == null ? 'null' : (body as object).constructor.name);
 
-      try {
-        let bodyText: string | null = null;
-        if (typeof body === 'string') bodyText = body;
-        else if (body instanceof ArrayBuffer) bodyText = new TextDecoder().decode(body);
-        else if (body instanceof Uint8Array) bodyText = new TextDecoder().decode(body);
-        else if (body instanceof Blob) {
-          body.text().then(text => {
-            vlog('[XHR] async blob body (first 500 chars):', text.substring(0, 500));
-            processBody(url, text);
-          });
-        }
+      // Capture body text for request processing
+      let bodyText: string | null = null;
+      if (typeof body === 'string') bodyText = body;
+      else if (body instanceof ArrayBuffer) bodyText = new TextDecoder().decode(body);
+      else if (body instanceof Uint8Array) bodyText = new TextDecoder().decode(body);
+      else if (body instanceof Blob) {
+        body.text().then(text => {
+          vlog('[XHR] async blob body (first 500 chars):', text.substring(0, 500));
+          processBody(url, text, []);
+        });
+      }
 
-        if (bodyText) {
-          vlog('[XHR] body text (first 500 chars):', bodyText.substring(0, 500));
-          processBody(url, bodyText);
-        }
-      } catch (err) {
-        vlog('[XHR] error reading body:', err);
+      if (bodyText) {
+        const capturedBodyText = bodyText;
+        vlog('[XHR] body text (first 500 chars):', capturedBodyText.substring(0, 500));
+
+        // Listen for response to extract sample fields
+        xhr.addEventListener('load', function () {
+          let sampleFields: FieldSample[] = [];
+          try {
+            const responseText = xhr.responseText;
+            const responseData = JSON.parse(responseText) as Record<string, unknown>;
+            sampleFields = extractSampleFields(responseData);
+            vlog('[XHR] extracted', sampleFields.length, 'sample fields from response');
+          } catch {
+            vlog('[XHR] could not parse XHR response for field extraction');
+          }
+          processBody(url, capturedBodyText, sampleFields);
+        });
       }
     }
 

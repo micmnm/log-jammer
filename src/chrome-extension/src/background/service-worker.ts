@@ -41,6 +41,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'PAUSE_SUBSCRIPTION') {
+    handlePauseSubscription(message.payload.subscriptionId).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (message.type === 'RESUME_SUBSCRIPTION') {
+    handleResumeSubscription(message.payload.subscriptionId).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
   if (message.type === 'UPDATE_SETTINGS') {
     StorageManager.saveSettings(message.payload).then(() => {
       log('Settings updated', message.payload.verbose ? '(verbose ON)' : '(verbose OFF)');
@@ -63,6 +73,7 @@ async function handleCapturedQuery(payload: {
   indexPattern: string;
   kibanaUrl: string;
   capturedAt: string;
+  sampleFields?: { name: string; sampleValue: string }[];
 }): Promise<void> {
   const query: CapturedQuery = {
     id: crypto.randomUUID(),
@@ -74,6 +85,7 @@ async function handleCapturedQuery(payload: {
     fullRequestBody: payload.fullRequestBody,
     summary: summarizeQuery(payload.queryDsl),
     capturedAt: payload.capturedAt,
+    sampleFields: payload.sampleFields,
   };
   log('Query captured:', query.summary, `[${query.indexPattern}]`);
   await vlog('Full request body:', JSON.stringify(query.fullRequestBody, null, 2));
@@ -95,6 +107,7 @@ async function handleSubscribe(payload: {
   queryId: string;
   name: string;
   pollIntervalMinutes?: number;
+  selectedFields: string[];
 }): Promise<{ ok: boolean; error?: string; subscriptionId?: string }> {
   const queries = await StorageManager.getCapturedQueries();
   const query = queries.find(q => q.id === payload.queryId);
@@ -102,26 +115,31 @@ async function handleSubscribe(payload: {
 
   const settings = await StorageManager.getSettings();
   const pollIntervalMinutes = payload.pollIntervalMinutes ?? settings.defaultPollIntervalMinutes ?? 5;
+  const selectedFields = payload.selectedFields ?? [];
+
+  // Build message template from selected fields
+  const messageTemplate = selectedFields.map(f => `{${f}}`).join(' | ');
 
   log(`Creating subscription "${payload.name}" with poll interval ${pollIntervalMinutes}m`);
 
   // Create DataSource in Log Jammer
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (settings.apiToken) headers['Authorization'] = `Bearer ${settings.apiToken}`;
+    if (settings.apiKey) headers['X-Api-Key'] = settings.apiKey;
 
     const dsResponse = await fetch(`${settings.logJammerUrl}/api/datasources`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         name: payload.name,
-        adapterType: 'KibanaProxy',
+        type: 'KibanaProxy',
         connectionConfig: JSON.stringify({
           kibanaUrl: query.kibanaUrl,
           indexPattern: query.indexPattern,
           queryDsl: query.queryDsl,
           capturedAt: query.capturedAt,
         }),
+        messageTemplate,
         pollIntervalSeconds: pollIntervalMinutes * 60,
         enabled: true,
       }),
@@ -143,6 +161,8 @@ async function handleSubscribe(payload: {
       lastPollAt: null,
       lastError: null,
       status: 'active',
+      selectedFields,
+      messageTemplate,
     };
 
     await StorageManager.saveSubscription(subscription);
@@ -167,6 +187,43 @@ async function handleUnsubscribe(subscriptionId: string): Promise<void> {
   await StorageManager.removeSubscription(subscriptionId);
 }
 
+async function handlePauseSubscription(subscriptionId: string): Promise<void> {
+  const subscriptions = await StorageManager.getSubscriptions();
+  const sub = subscriptions.find(s => s.id === subscriptionId);
+  if (!sub) return;
+  chrome.alarms.clear(`poll_${subscriptionId}`);
+  sub.status = 'paused';
+  sub.lastError = null;
+  await StorageManager.saveSubscription(sub);
+  log(`Subscription "${sub.name}" paused manually`);
+  updateBadge(subscriptions.map(s => s.id === subscriptionId ? sub : s));
+}
+
+async function handleResumeSubscription(subscriptionId: string): Promise<void> {
+  const subscriptions = await StorageManager.getSubscriptions();
+  const sub = subscriptions.find(s => s.id === subscriptionId);
+  if (!sub) return;
+  sub.status = 'active';
+  sub.lastError = null;
+  await StorageManager.saveSubscription(sub);
+  chrome.alarms.create(`poll_${sub.id}`, {
+    periodInMinutes: sub.pollIntervalMinutes,
+    delayInMinutes: 0.5,
+  });
+  log(`Subscription "${sub.name}" resumed manually`);
+  updateBadge(subscriptions.map(s => s.id === subscriptionId ? sub : s));
+}
+
+function updateBadge(subscriptions: Subscription[]): void {
+  const anyPaused = subscriptions.some(s => s.status === 'paused');
+  if (anyPaused) {
+    chrome.action.setBadgeText({ text: '!' });
+    chrome.action.setBadgeBackgroundColor({ color: '#ff1744' });
+  } else {
+    chrome.action.setBadgeText({ text: '' });
+  }
+}
+
 // --- Alarm-driven polling ---
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -184,6 +241,42 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   log(`Polling "${subscription.name}"...`);
   await executePoll(subscription, query);
 });
+
+// --- Client-side message template application ---
+
+function buildMessage(
+  hitData: Record<string, unknown>,
+  subscription: Subscription
+): string {
+  const fields = subscription.selectedFields;
+  if (fields.length === 0) {
+    // Fallback: stringify full record
+    return JSON.stringify(hitData);
+  }
+  return fields
+    .map(f => {
+      const val = hitData[f];
+      return val !== undefined && val !== null ? String(val) : '';
+    })
+    .filter(Boolean)
+    .join(' | ');
+}
+
+function detectTimestamp(hitData: Record<string, unknown>): string {
+  return (
+    (hitData['@timestamp'] as string | undefined) ??
+    (hitData['timestamp'] as string | undefined) ??
+    new Date().toISOString()
+  );
+}
+
+function detectLevel(hitData: Record<string, unknown>): string | undefined {
+  const val =
+    hitData['log.level'] ??
+    hitData['level'] ??
+    hitData['severity'];
+  return val !== undefined ? String(val) : undefined;
+}
 
 async function executePoll(subscription: Subscription, query: CapturedQuery): Promise<void> {
   const settings = await StorageManager.getSettings();
@@ -213,6 +306,7 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
     });
 
     if (kibanaResponse.status === 401 || kibanaResponse.status === 403) {
+      // Per-subscription pause — only pause THIS subscription
       subscription.status = 'paused';
       const details = settings.errorDetails
         ? `\n--- error details ---\npoll URL: ${pollUrl}\nresponse: ${kibanaResponse.status}`
@@ -220,8 +314,8 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
       subscription.lastError = `Kibana session expired. Visit Kibana to re-authenticate.${details}`;
       await StorageManager.saveSubscription(subscription);
       log(`Poll "${subscription.name}" paused — Kibana session expired`);
-      chrome.action.setBadgeText({ text: '!' });
-      chrome.action.setBadgeBackgroundColor({ color: '#ff1744' });
+      const allSubs = await StorageManager.getSubscriptions();
+      updateBadge(allSubs);
       return;
     }
 
@@ -273,7 +367,7 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
     const newDocIds = newHits.map(h => h._id as string).filter(Boolean);
     await addSeenDocIds(subscription.id, newDocIds);
 
-    // Push to Log Jammer — Kibana may return _source or fields (when _source: false)
+    // Apply message template client-side: extract selected fields, combine into pre-built message
     const entries: IngestEntry[] = newHits.map(hit => {
       const source = hit._source as Record<string, unknown> | undefined;
       const fields = hit.fields as Record<string, unknown> | undefined;
@@ -285,16 +379,18 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
         }
       }
       const hitData = source ?? flatFields;
-      // Include _id for backend-side dedup as well
-      if (hit._id) hitData['_id'] = hit._id;
-      return {
-        timestamp: (hitData['@timestamp'] as string) ?? new Date().toISOString(),
-        fields: hitData,
-      };
+
+      const timestamp = detectTimestamp(hitData);
+      const level = detectLevel(hitData);
+      const message = buildMessage(hitData, subscription);
+
+      const entry: IngestEntry = { message, timestamp };
+      if (level !== undefined) entry.level = level;
+      return entry;
     });
 
     const ingestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (settings.apiToken) ingestHeaders['Authorization'] = `Bearer ${settings.apiToken}`;
+    if (settings.apiKey) ingestHeaders['X-Api-Key'] = settings.apiKey;
 
     const ingestResponse = await fetch(
       `${settings.logJammerUrl}/api/ingest/${subscription.dataSourceId}`,
@@ -304,6 +400,20 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
         body: JSON.stringify({ entries }),
       }
     );
+
+    if (ingestResponse.status === 401 || ingestResponse.status === 403) {
+      // Per-subscription pause on ingest auth failure
+      subscription.status = 'paused';
+      const details = settings.errorDetails
+        ? `\n--- error details ---\ningest URL: ${settings.logJammerUrl}/api/ingest/${subscription.dataSourceId}\nresponse: ${ingestResponse.status}`
+        : '';
+      subscription.lastError = `Log Jammer auth failed (${ingestResponse.status}). Check API key.${details}`;
+      await StorageManager.saveSubscription(subscription);
+      log(`Poll "${subscription.name}" paused — Log Jammer auth failed (${ingestResponse.status})`);
+      const allSubs = await StorageManager.getSubscriptions();
+      updateBadge(allSubs);
+      return;
+    }
 
     if (!ingestResponse.ok) {
       const ingestError = await ingestResponse.text().catch(() => '(could not read body)');
