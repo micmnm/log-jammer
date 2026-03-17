@@ -312,13 +312,22 @@ async function readBody(url: string, body: BodyInit | null | undefined): Promise
           // Async: extract sample fields from response body and then fire the query message
           responseClone.text().then(responseText => {
             let sampleFields: FieldSample[] = [];
+            // Try single JSON first, then NDJSON (newline-delimited)
             try {
               const responseData = JSON.parse(responseText) as Record<string, unknown>;
               sampleFields = extractSampleFields(responseData);
-              vlog('[fetch] extracted', sampleFields.length, 'sample fields from response');
             } catch {
-              vlog('[fetch] could not parse response for field extraction');
+              // NDJSON: try each line
+              const lines = responseText.split('\n').filter(Boolean);
+              for (const line of lines) {
+                try {
+                  const lineData = JSON.parse(line) as Record<string, unknown>;
+                  sampleFields = extractSampleFields(lineData);
+                  if (sampleFields.length > 0) break;
+                } catch { /* skip */ }
+              }
             }
+            vlog('[fetch] extracted', sampleFields.length, 'sample fields from response');
             processBody(url, bodyText, sampleFields);
           }).catch(() => {
             // If response read fails, still capture query without fields
