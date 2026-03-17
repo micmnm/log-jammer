@@ -10,20 +10,14 @@ RUN npm run build
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dotnet-build
 WORKDIR /src
 
-# Copy solution and project files for restore
 COPY Directory.Build.props .
-COPY LogJammer.slnx .
-COPY LogJammer.Core/LogJammer.Core.csproj LogJammer.Core/
-COPY LogJammer.Infrastructure/LogJammer.Infrastructure.csproj LogJammer.Infrastructure/
+COPY LogJammer.Engine/LogJammer.Engine.csproj LogJammer.Engine/
 COPY LogJammer.Api/LogJammer.Api.csproj LogJammer.Api/
 
-# Restore
 RUN dotnet restore LogJammer.Api/LogJammer.Api.csproj
 
-# Copy all source
 COPY . .
 
-# Build and publish
 RUN dotnet publish LogJammer.Api/LogJammer.Api.csproj -c Release -o /app/publish --no-restore
 
 # Stage 3: Runtime
