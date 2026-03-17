@@ -31,7 +31,9 @@ builder.Services.AddHostedService<DataRetentionService>();
 builder.Services.AddHostedService<ElasticsearchPollingService>();
 
 // API
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
 builder.Services.AddCors(options =>
     options.AddPolicy("DevCors", policy =>

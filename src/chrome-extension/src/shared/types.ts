@@ -38,7 +38,7 @@ export interface ExtensionSettings {
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  logJammerUrl: 'http://localhost:5000',
+  logJammerUrl: 'http://localhost:5050',
   apiKey: '',
   maxCapturedQueries: 50,
   defaultPollIntervalMinutes: 5,
