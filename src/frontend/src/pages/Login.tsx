@@ -1,115 +1,80 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  TextField,
-  Typography,
-  Alert,
-  useTheme,
-} from '@mui/material';
-import { useAuth } from '../contexts/AuthContext';
+import Box from '@mui/material/Box';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
+import { useLogin } from '../api/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
-  const theme = useTheme();
-  const navigate = useNavigate();
-  const { isAuthenticated, login } = useAuth();
-  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const login = useLogin();
+  const navigate = useNavigate();
 
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />;
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      await login(username, password);
-      navigate('/', { replace: true });
-    } catch {
-      setError('Invalid username or password');
-    } finally {
-      setLoading(false);
-    }
-  };
+    login.mutate(password, {
+      onSuccess: () => {
+        void navigate('/dashboard');
+      },
+    });
+  }
 
   return (
     <Box
       sx={{
-        minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        minHeight: '100vh',
         bgcolor: 'background.default',
       }}
     >
-      <Card sx={{ width: 400, maxWidth: '90vw' }}>
-        <CardContent sx={{ p: 4 }}>
+      <Card sx={{ width: 360, p: 2 }}>
+        <CardContent>
           <Typography
             variant="h5"
+            component="h1"
             sx={{
               mb: 1,
-              fontFamily: theme.fontFamilyMono,
+              fontWeight: 700,
+              letterSpacing: '0.05em',
               color: 'primary.main',
-              textAlign: 'center',
-              letterSpacing: '0.1em',
             }}
           >
             LOG JAMMER
           </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              mb: 3,
-              color: 'text.secondary',
-              textAlign: 'center',
-              fontFamily: theme.fontFamilyMono,
-              fontSize: '0.7rem',
-              letterSpacing: '0.05em',
-            }}
-          >
-            AUTHENTICATION REQUIRED
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Log monitoring & anomaly detection
           </Typography>
 
-          {error && (
+          {login.isError && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
+              {login.error instanceof Error ? login.error.message : 'Login failed'}
             </Alert>
           )}
 
           <Box component="form" onSubmit={handleSubmit}>
-            <TextField
-              label="Username"
-              fullWidth
-              autoFocus
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              sx={{ mb: 2 }}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
             <TextField
               label="Password"
               type="password"
               fullWidth
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              sx={{ mb: 3 }}
-              slotProps={{ inputLabel: { shrink: true } }}
+              autoFocus
+              sx={{ mb: 2 }}
+              disabled={login.isPending}
             />
             <Button
               type="submit"
               variant="contained"
               fullWidth
-              disabled={loading || !username || !password}
-              sx={{ py: 1.2 }}
+              disabled={login.isPending || !password}
             >
-              {loading ? 'Authenticating...' : 'Log In'}
+              {login.isPending ? 'Signing in…' : 'Sign In'}
             </Button>
           </Box>
         </CardContent>

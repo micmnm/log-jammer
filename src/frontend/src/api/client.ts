@@ -1,72 +1,67 @@
 const BASE_URL = '/api';
-const TOKEN_KEY = 'logjammer_token';
 
-export class ApiRequestError extends Error {
-  readonly status: number;
-  readonly title: string;
-  readonly detail: string;
-
-  constructor(status: number, title: string, detail: string) {
-    super(detail || title || `API error: ${status}`);
-    this.name = 'ApiRequestError';
-    this.status = status;
-    this.title = title;
-    this.detail = detail;
-  }
+function getToken(): string | null {
+  return localStorage.getItem('auth_token');
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem(TOKEN_KEY);
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options?.headers as Record<string, string>),
-  };
+function getHeaders(hasBody: boolean): HeadersInit {
+  const headers: Record<string, string> = {};
+  const token = getToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  if (hasBody) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
+}
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
-
+async function handleResponse<T>(response: Response): Promise<T> {
   if (response.status === 401) {
-    localStorage.removeItem(TOKEN_KEY);
-    window.location.href = '/login';
-    throw new ApiRequestError(401, 'Unauthorized', 'Session expired. Please log in again.');
+    localStorage.removeItem('auth_token');
+    window.location.href = '/';
+    throw new Error('Unauthorized');
   }
-
   if (!response.ok) {
-    let title = response.statusText;
-    let detail = '';
-    try {
-      const body = await response.json();
-      title = body.title || title;
-      detail = body.detail || '';
-    } catch {
-      // Response body isn't JSON — use defaults
-    }
-    throw new ApiRequestError(response.status, title, detail);
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
   }
-
   if (response.status === 204) {
     return undefined as T;
   }
-
   return response.json() as Promise<T>;
 }
 
-export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, {
-      method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
-    }),
-  put: <T>(path: string, body?: unknown) =>
-    request<T>(path, {
-      method: 'PUT',
-      body: body ? JSON.stringify(body) : undefined,
-    }),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
-};
+export async function apiGet<T>(path: string): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'GET',
+    headers: getHeaders(false),
+  });
+  return handleResponse<T>(response);
+}
+
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: getHeaders(body !== undefined),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  return handleResponse<T>(response);
+}
+
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: getHeaders(body !== undefined),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  return handleResponse<T>(response);
+}
+
+export async function apiDelete(path: string): Promise<void> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'DELETE',
+    headers: getHeaders(false),
+  });
+  await handleResponse<void>(response);
+}
