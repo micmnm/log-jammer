@@ -439,6 +439,9 @@ FodyWeavers.xsd
 **/models/
 !**/Models/
 
+# Local appsettings overrides
+**/appsettings.Local.json
+
 # Claude
 .claude/
 
