@@ -48,7 +48,7 @@ export default function Sidebar() {
                   borderRadius: 1,
                   mb: 0.5,
                   '&.Mui-selected': {
-                    backgroundColor: 'rgba(0, 188, 212, 0.1)',
+                    backgroundColor: 'action.selected',
                     borderLeft: '3px solid',
                     borderColor: 'primary.main',
                     '& .MuiListItemIcon-root': { color: 'primary.main' },

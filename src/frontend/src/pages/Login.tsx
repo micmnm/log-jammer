@@ -40,12 +40,13 @@ export default function Login() {
             component="h1"
             sx={{
               mb: 1,
+              fontFamily: '"Lexend", sans-serif',
               fontWeight: 700,
               letterSpacing: '0.05em',
               color: 'primary.main',
             }}
           >
-            LOG JAMMER
+            Log Jammer
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Log monitoring & anomaly detection

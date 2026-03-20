@@ -5,6 +5,7 @@ import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import Grid from '@mui/material/Grid';
+import { useTheme } from '@mui/material/styles';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -48,6 +49,7 @@ function relativeTime(iso: string): string {
 export default function PatternDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: pattern, isLoading, error } = usePatternDetail(id ?? '');
+  const theme = useTheme();
 
   if (isLoading) {
     return (
@@ -91,14 +93,19 @@ export default function PatternDetail() {
 
   const hasBaseline = alignedUpper.some((v) => v !== null);
 
+  const primaryColor = theme.palette.primary.main;
+  const secondaryColor = theme.palette.secondary.main;
+  const textSecondary = theme.palette.text.secondary;
+  const gridColor = theme.palette.divider;
+
   const chartData = {
     labels: chartLabels,
     datasets: [
       {
         label: 'Count',
         data: pattern.occurrences.map((o) => o.count),
-        borderColor: '#00bcd4',
-        backgroundColor: 'rgba(0, 188, 212, 0.1)',
+        borderColor: primaryColor,
+        backgroundColor: `${primaryColor}1a`,
         borderWidth: 2,
         pointRadius: 2,
         tension: 0.3,
@@ -109,8 +116,8 @@ export default function PatternDetail() {
             {
               label: 'Expected (upper)',
               data: alignedUpper,
-              borderColor: 'rgba(121, 134, 203, 0.4)',
-              backgroundColor: 'rgba(121, 134, 203, 0.1)',
+              borderColor: `${secondaryColor}66`,
+              backgroundColor: `${secondaryColor}1a`,
               borderWidth: 1,
               borderDash: [4, 4],
               pointRadius: 0,
@@ -120,8 +127,8 @@ export default function PatternDetail() {
             {
               label: 'Expected (lower)',
               data: alignedLower,
-              borderColor: 'rgba(121, 134, 203, 0.4)',
-              backgroundColor: 'rgba(121, 134, 203, 0.1)',
+              borderColor: `${secondaryColor}66`,
+              backgroundColor: `${secondaryColor}1a`,
               borderWidth: 1,
               borderDash: [4, 4],
               pointRadius: 0,
@@ -139,7 +146,7 @@ export default function PatternDetail() {
     plugins: {
       legend: {
         labels: {
-          color: '#8896a8',
+          color: textSecondary,
           font: { size: 11 },
         },
       },
@@ -147,12 +154,12 @@ export default function PatternDetail() {
     },
     scales: {
       x: {
-        ticks: { color: '#8896a8', font: { size: 10 } },
-        grid: { color: '#1e2d40' },
+        ticks: { color: textSecondary, font: { size: 10 } },
+        grid: { color: gridColor },
       },
       y: {
-        ticks: { color: '#8896a8', font: { size: 10 } },
-        grid: { color: '#1e2d40' },
+        ticks: { color: textSecondary, font: { size: 10 } },
+        grid: { color: gridColor },
         beginAtZero: true,
       },
     },
