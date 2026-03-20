@@ -69,6 +69,28 @@ export default function PatternDetail() {
     new Date(o.windowStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   );
 
+  // Map baseline bands by hourOfWeek for O(1) lookup
+  const baselineByHour = new Map(
+    pattern.baselineBands.map((b) => [b.hourOfWeek, b])
+  );
+
+  // Align baseline data to occurrence timestamps by computing hourOfWeek for each window
+  const alignedUpper = pattern.occurrences.map((o) => {
+    const d = new Date(o.windowStart);
+    const hourOfWeek = d.getUTCDay() * 24 + d.getUTCHours();
+    const b = baselineByHour.get(hourOfWeek);
+    return b ? b.avgCount + b.stdDevCount : null;
+  });
+
+  const alignedLower = pattern.occurrences.map((o) => {
+    const d = new Date(o.windowStart);
+    const hourOfWeek = d.getUTCDay() * 24 + d.getUTCHours();
+    const b = baselineByHour.get(hourOfWeek);
+    return b ? Math.max(0, b.avgCount - b.stdDevCount) : null;
+  });
+
+  const hasBaseline = alignedUpper.some((v) => v !== null);
+
   const chartData = {
     labels: chartLabels,
     datasets: [
@@ -82,11 +104,11 @@ export default function PatternDetail() {
         tension: 0.3,
         fill: false,
       },
-      ...(pattern.baselineBands.length > 0
+      ...(hasBaseline
         ? [
             {
               label: 'Expected (upper)',
-              data: pattern.baselineBands.map((b) => b.avgCount + b.stdDevCount),
+              data: alignedUpper,
               borderColor: 'rgba(121, 134, 203, 0.4)',
               backgroundColor: 'rgba(121, 134, 203, 0.1)',
               borderWidth: 1,
@@ -97,7 +119,7 @@ export default function PatternDetail() {
             },
             {
               label: 'Expected (lower)',
-              data: pattern.baselineBands.map((b) => Math.max(0, b.avgCount - b.stdDevCount)),
+              data: alignedLower,
               borderColor: 'rgba(121, 134, 203, 0.4)',
               backgroundColor: 'rgba(121, 134, 203, 0.1)',
               borderWidth: 1,

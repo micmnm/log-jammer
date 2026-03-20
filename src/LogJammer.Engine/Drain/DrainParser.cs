@@ -231,6 +231,13 @@ public partial class DrainParser
         return (bestCluster, bestSimilarity);
     }
 
+    public static double ComputeTemplateSimilarity(string templateA, string templateB)
+    {
+        var tokensA = Tokenize(templateA);
+        var tokensB = Tokenize(templateB);
+        return ComputeSimilarity(tokensA.Select(t => t).ToList(), tokensB);
+    }
+
     private static double ComputeSimilarity(List<string> templateTokens, string[] messageTokens)
     {
         if (templateTokens.Count != messageTokens.Length)

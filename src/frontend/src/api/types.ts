@@ -57,6 +57,11 @@ export interface NewPatternItem {
   dataSourceName: string;
 }
 
+export interface AcknowledgeResult {
+  similarCount: number;
+  similarPatterns: { id: string; template: string; similarity: number }[];
+}
+
 export interface PagedResult<T> {
   items: T[];
   totalCount: number;

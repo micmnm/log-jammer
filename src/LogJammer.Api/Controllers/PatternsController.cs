@@ -107,15 +107,15 @@ public class PatternsController(LogJammerDbContext db, BaselineCalculator baseli
     }
 
     [HttpPost("{id:guid}/acknowledge")]
-    public async Task<IActionResult> Acknowledge(Guid id)
+    public async Task<ActionResult<AcknowledgeResult>> Acknowledge(Guid id)
     {
         var exists = await db.LogPatterns.AnyAsync(p => p.Id == id);
         if (!exists)
             return NotFound();
 
         var store = new PatternStore(db);
-        await store.AcknowledgeAsync(id);
-        return NoContent();
+        var result = await store.AcknowledgeAsync(id);
+        return Ok(result);
     }
 
     [HttpPost("acknowledge-all")]

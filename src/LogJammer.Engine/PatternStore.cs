@@ -25,7 +25,7 @@ public class PatternStore(LogJammerDbContext db)
             {
                 Id = Guid.NewGuid(),
                 ClusterId = result.ClusterId,
-                Template = result.Template,
+                Template = Truncate(result.Template, 2000),
                 FirstSeen = timestamp,
                 LastSeen = timestamp,
                 SampleMessage = Truncate(rawMessage, 4000),
@@ -76,12 +76,35 @@ public class PatternStore(LogJammerDbContext db)
         await db.SaveChangesAsync();
     }
 
-    public async Task AcknowledgeAsync(Guid patternId)
+    public async Task<AcknowledgeResult> AcknowledgeAsync(Guid patternId)
     {
-        await db.LogPatterns
-            .Where(p => p.Id == patternId)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsNew, false));
+        var pattern = await db.LogPatterns.FirstOrDefaultAsync(p => p.Id == patternId);
+        if (pattern is null)
+            return new AcknowledgeResult(0, []);
+
+        pattern.IsNew = false;
+
+        // Find similar "new" patterns within the same data source
+        var newPatterns = await db.LogPatterns
+            .Where(p => p.IsNew && p.Id != patternId && p.DataSourceId == pattern.DataSourceId)
+            .ToListAsync();
+
+        var alsoAcknowledged = new List<SimilarPatternMatch>();
+        foreach (var candidate in newPatterns)
+        {
+            var similarity = DrainParser.ComputeTemplateSimilarity(pattern.Template, candidate.Template);
+            if (similarity >= SimilarityThreshold)
+            {
+                candidate.IsNew = false;
+                alsoAcknowledged.Add(new SimilarPatternMatch(candidate.Id, candidate.Template, similarity));
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return new AcknowledgeResult(alsoAcknowledged.Count, alsoAcknowledged);
     }
+
+    private const double SimilarityThreshold = 0.6;
 
     public async Task<int> AcknowledgeAllAsync(Guid? dataSourceId)
     {
@@ -97,3 +120,6 @@ public class PatternStore(LogJammerDbContext db)
     private static string Truncate(string value, int maxLength) =>
         value.Length <= maxLength ? value : value[..maxLength];
 }
+
+public record AcknowledgeResult(int SimilarCount, List<SimilarPatternMatch> SimilarPatterns);
+public record SimilarPatternMatch(Guid Id, string Template, double Similarity);

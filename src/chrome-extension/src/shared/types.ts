@@ -26,6 +26,8 @@ export interface Subscription {
   selectedFields: string[];
   /** Message template built from selected fields, e.g. "{service} | {message}" */
   messageTemplate: string;
+  /** Snapshot of the captured query at subscription time — immune to query rotation */
+  querySnapshot?: CapturedQuery;
 }
 
 export interface ExtensionSettings {
@@ -38,7 +40,7 @@ export interface ExtensionSettings {
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  logJammerUrl: 'http://localhost:5050',
+  logJammerUrl: 'http://localhost:5000',
   apiKey: '',
   maxCapturedQueries: 50,
   defaultPollIntervalMinutes: 5,

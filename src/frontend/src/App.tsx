@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import DataSources from './pages/DataSources';
+import Patterns from './pages/Patterns';
 import PatternDetail from './pages/PatternDetail';
 import type { ReactNode } from 'react';
 
@@ -38,6 +39,7 @@ export default function App() {
         }
       >
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/patterns" element={<Patterns />} />
         <Route path="/data-sources" element={<DataSources />} />
         <Route path="/patterns/:id" element={<PatternDetail />} />
       </Route>

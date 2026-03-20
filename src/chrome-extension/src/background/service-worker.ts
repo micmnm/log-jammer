@@ -163,6 +163,7 @@ async function handleSubscribe(payload: {
       status: 'active',
       selectedFields,
       messageTemplate,
+      querySnapshot: query,
     };
 
     await StorageManager.saveSubscription(subscription);
@@ -183,6 +184,25 @@ async function handleSubscribe(payload: {
 async function handleUnsubscribe(subscriptionId: string): Promise<void> {
   chrome.alarms.clear(`poll_${subscriptionId}`);
   await clearSeenDocIds(subscriptionId);
+
+  // Delete the data source from Log Jammer backend
+  const subscriptions = await StorageManager.getSubscriptions();
+  const sub = subscriptions.find(s => s.id === subscriptionId);
+  if (sub) {
+    const settings = await StorageManager.getSettings();
+    const headers: Record<string, string> = {};
+    if (settings.apiKey) headers['X-Api-Key'] = settings.apiKey;
+    try {
+      await fetch(`${settings.logJammerUrl}/api/datasources/${sub.dataSourceId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      log(`Deleted data source ${sub.dataSourceId} from Log Jammer`);
+    } catch (err) {
+      log(`Failed to delete data source from Log Jammer:`, err);
+    }
+  }
+
   log('Subscription removed:', subscriptionId);
   await StorageManager.removeSubscription(subscriptionId);
 }
@@ -235,8 +255,11 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (!subscription || subscription.status !== 'active') return;
 
   const queries = await StorageManager.getCapturedQueries();
-  const query = queries.find(q => q.id === subscription.queryId);
-  if (!query) return;
+  const query = queries.find(q => q.id === subscription.queryId) ?? subscription.querySnapshot;
+  if (!query) {
+    log(`Poll "${subscription.name}" skipped — query not found and no snapshot`);
+    return;
+  }
 
   log(`Polling "${subscription.name}"...`);
   await executePoll(subscription, query);
@@ -250,7 +273,11 @@ function buildMessage(
 ): string {
   const fields = subscription.selectedFields;
   if (fields.length === 0) {
-    // Fallback: stringify full record
+    // Fallback: prefer known message fields, then stringify
+    for (const msgField of ['message', 'msg', 'log']) {
+      const val = hitData[msgField];
+      if (val !== undefined && val !== null && String(val).length > 0) return String(val);
+    }
     return JSON.stringify(hitData);
   }
   return fields
@@ -513,6 +540,8 @@ function adjustTimeRangeInFullRequest(
   const batch = adjusted.batch as Record<string, unknown>[] | undefined;
   if (batch && batch.length > 0) {
     const request = batch[0].request as Record<string, unknown> | undefined;
+    // Strip async search ID — it's a one-time reference that expires
+    if (request) delete request.id;
     const params = request?.params as Record<string, unknown> | undefined;
     if (params?.body) {
       params.body = adjustTimeRange(params.body as Record<string, unknown>, lastPollAt);

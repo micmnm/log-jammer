@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -10,6 +11,8 @@ import TableRow from '@mui/material/TableRow';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 import { useDashboard } from '../api/hooks/useDashboard';
 import { useAcknowledgePattern, useAcknowledgeAll } from '../api/hooks/usePatterns';
 import SeverityChip from '../components/SeverityChip';
@@ -39,6 +42,7 @@ export default function Dashboard() {
   const acknowledge = useAcknowledgePattern();
   const acknowledgeAll = useAcknowledgeAll();
   const navigate = useNavigate();
+  const [similarMessage, setSimilarMessage] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -150,7 +154,15 @@ export default function Dashboard() {
                         variant="text"
                         onClick={(e) => {
                           e.stopPropagation();
-                          acknowledge.mutate(p.patternId);
+                          acknowledge.mutate(p.patternId, {
+                            onSuccess: (result) => {
+                              if (result && result.similarCount > 0) {
+                                setSimilarMessage(
+                                  `Also acknowledged ${result.similarCount} similar pattern${result.similarCount > 1 ? 's' : ''}`
+                                );
+                              }
+                            },
+                          });
                         }}
                         disabled={acknowledge.isPending}
                       >
@@ -226,6 +238,16 @@ export default function Dashboard() {
           </Table>
         </TableContainer>
       </Box>
+      <Snackbar
+        open={!!similarMessage}
+        autoHideDuration={5000}
+        onClose={() => setSimilarMessage(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSimilarMessage(null)} severity="info" variant="filled">
+          {similarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

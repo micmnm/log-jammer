@@ -143,11 +143,11 @@ function extractSampleFields(responseData: Record<string, unknown>): FieldSample
   return Array.from(fieldMap.entries()).map(([name, sampleValue]) => ({ name, sampleValue }));
 }
 
-function processBody(
+async function processBody(
   url: string,
   bodyText: string,
   sampleFields?: FieldSample[]
-): void {
+): Promise<void> {
   const lines = bodyText.split('\n').filter(Boolean);
   vlog('NDJSON lines:', lines.length);
 
@@ -162,6 +162,44 @@ function processBody(
           const body = entry.params.body as Record<string, unknown> | undefined;
           if (!body?.query) continue;
 
+          let fields = sampleFields ?? [];
+
+          // If no sample fields from response (compressed), replay with compress=false
+          if (fields.length === 0) {
+            const uncompressedUrl = url.replace('compress=true', 'compress=false');
+            // Strip the async search ID from the replay request
+            const replayBody = JSON.parse(JSON.stringify(entry.fullRequestBody));
+            if (Array.isArray(replayBody.batch) && replayBody.batch[0]?.request) {
+              delete replayBody.batch[0].request.id;
+            }
+            vlog('Replaying request uncompressed for field extraction...');
+            try {
+              const originalFetch = (window as unknown as { __ljOriginalFetch?: typeof fetch }).__ljOriginalFetch ?? window.fetch;
+              const resp = await originalFetch(uncompressedUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'kbn-xsrf': 'true' },
+                credentials: 'include',
+                body: JSON.stringify(replayBody),
+              });
+              const respText = await resp.text();
+              try {
+                const respData = JSON.parse(respText) as Record<string, unknown>;
+                fields = extractSampleFields(respData);
+              } catch {
+                const respLines = respText.split('\n').filter(Boolean);
+                for (const rl of respLines) {
+                  try {
+                    fields = extractSampleFields(JSON.parse(rl) as Record<string, unknown>);
+                    if (fields.length > 0) break;
+                  } catch { /* skip */ }
+                }
+              }
+              vlog('Uncompressed replay extracted', fields.length, 'sample fields');
+            } catch (err) {
+              vlog('Uncompressed replay failed:', err);
+            }
+          }
+
           log('Query captured (fetch documents) from', url);
           vlog('queryDsl:', JSON.stringify(body, null, 2));
           window.postMessage({
@@ -175,7 +213,7 @@ function processBody(
               indexPattern: (entry.params.index as string) ?? extractIndexFromUrl(url),
               kibanaUrl: window.location.origin,
               capturedAt: new Date().toISOString(),
-              sampleFields: sampleFields ?? [],
+              sampleFields: fields,
             },
           }, '*');
         }
@@ -285,6 +323,8 @@ async function readBody(url: string, body: BodyInit | null | undefined): Promise
 // --- Patch fetch ---
 (function patchFetch(): void {
   const originalFetch = window.fetch;
+  // Expose original fetch for uncompressed replay in processBody
+  (window as unknown as { __ljOriginalFetch: typeof fetch }).__ljOriginalFetch = originalFetch;
   log('fetch interceptor installed');
 
   window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -310,26 +350,42 @@ async function readBody(url: string, body: BodyInit | null | undefined): Promise
           const responseClone = response.clone();
 
           // Async: extract sample fields from response body and then fire the query message
-          responseClone.text().then(responseText => {
+          (async () => {
             let sampleFields: FieldSample[] = [];
-            // Try single JSON first, then NDJSON (newline-delimited)
             try {
-              const responseData = JSON.parse(responseText) as Record<string, unknown>;
-              sampleFields = extractSampleFields(responseData);
-            } catch {
-              // NDJSON: try each line
-              const lines = responseText.split('\n').filter(Boolean);
-              for (const line of lines) {
-                try {
-                  const lineData = JSON.parse(line) as Record<string, unknown>;
-                  sampleFields = extractSampleFields(lineData);
-                  if (sampleFields.length > 0) break;
-                } catch { /* skip */ }
+              let responseText: string;
+              if (isCompressedUrl(url)) {
+                // Response is compressed — read as bytes and decompress
+                const raw = new Uint8Array(await responseClone.arrayBuffer());
+                if (raw.length > 0 && !looksLikeJson(raw)) {
+                  responseText = await decompressBody(raw);
+                } else {
+                  responseText = new TextDecoder().decode(raw);
+                }
+              } else {
+                responseText = await responseClone.text();
               }
+              // Try single JSON first, then NDJSON (newline-delimited)
+              try {
+                const responseData = JSON.parse(responseText) as Record<string, unknown>;
+                sampleFields = extractSampleFields(responseData);
+              } catch {
+                // NDJSON: try each line
+                const lines = responseText.split('\n').filter(Boolean);
+                for (const line of lines) {
+                  try {
+                    const lineData = JSON.parse(line) as Record<string, unknown>;
+                    sampleFields = extractSampleFields(lineData);
+                    if (sampleFields.length > 0) break;
+                  } catch { /* skip */ }
+                }
+              }
+            } catch (err) {
+              vlog('[fetch] response extraction error:', err);
             }
             vlog('[fetch] extracted', sampleFields.length, 'sample fields from response');
             processBody(url, bodyText, sampleFields);
-          }).catch(() => {
+          })().catch(() => {
             // If response read fails, still capture query without fields
             processBody(url, bodyText, []);
           });
@@ -388,16 +444,39 @@ async function readBody(url: string, body: BodyInit | null | undefined): Promise
 
         // Listen for response to extract sample fields
         xhr.addEventListener('load', function () {
-          let sampleFields: FieldSample[] = [];
-          try {
-            const responseText = xhr.responseText;
-            const responseData = JSON.parse(responseText) as Record<string, unknown>;
-            sampleFields = extractSampleFields(responseData);
-            vlog('[XHR] extracted', sampleFields.length, 'sample fields from response');
-          } catch {
-            vlog('[XHR] could not parse XHR response for field extraction');
-          }
-          processBody(url, capturedBodyText, sampleFields);
+          (async () => {
+            let sampleFields: FieldSample[] = [];
+            try {
+              let responseText: string;
+              if (isCompressedUrl(url) && xhr.responseType === 'arraybuffer') {
+                const raw = new Uint8Array(xhr.response as ArrayBuffer);
+                if (raw.length > 0 && !looksLikeJson(raw)) {
+                  responseText = await decompressBody(raw);
+                } else {
+                  responseText = new TextDecoder().decode(raw);
+                }
+              } else {
+                responseText = xhr.responseText;
+              }
+              try {
+                const responseData = JSON.parse(responseText) as Record<string, unknown>;
+                sampleFields = extractSampleFields(responseData);
+              } catch {
+                const lines = responseText.split('\n').filter(Boolean);
+                for (const line of lines) {
+                  try {
+                    const lineData = JSON.parse(line) as Record<string, unknown>;
+                    sampleFields = extractSampleFields(lineData);
+                    if (sampleFields.length > 0) break;
+                  } catch { /* skip */ }
+                }
+              }
+              vlog('[XHR] extracted', sampleFields.length, 'sample fields from response');
+            } catch {
+              vlog('[XHR] could not parse XHR response for field extraction');
+            }
+            processBody(url, capturedBodyText, sampleFields);
+          })();
         });
       }
     }
