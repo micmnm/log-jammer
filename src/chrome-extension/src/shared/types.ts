@@ -9,6 +9,8 @@ export interface CapturedQuery {
   fullRequestBody?: Record<string, unknown>;
   summary: string;
   capturedAt: string;
+  /** Sample fields extracted from the first response hits */
+  sampleFields?: { name: string; sampleValue: string }[];
 }
 
 export interface Subscription {
@@ -20,11 +22,17 @@ export interface Subscription {
   lastPollAt: string | null;
   lastError: string | null;
   status: 'active' | 'paused' | 'error';
+  /** Fields selected for the message template */
+  selectedFields: string[];
+  /** Message template built from selected fields, e.g. "{service} | {message}" */
+  messageTemplate: string;
+  /** Snapshot of the captured query at subscription time — immune to query rotation */
+  querySnapshot?: CapturedQuery;
 }
 
 export interface ExtensionSettings {
   logJammerUrl: string;
-  apiToken: string;
+  apiKey: string;
   maxCapturedQueries: number;
   defaultPollIntervalMinutes: number;
   verbose: boolean;
@@ -33,7 +41,7 @@ export interface ExtensionSettings {
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   logJammerUrl: 'http://localhost:5000',
-  apiToken: '',
+  apiKey: '',
   maxCapturedQueries: 50,
   defaultPollIntervalMinutes: 5,
   verbose: false,
@@ -41,8 +49,9 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 };
 
 export interface IngestEntry {
+  message: string;
   timestamp: string;
-  fields: Record<string, unknown>;
+  level?: string;
 }
 
 export interface IngestResponse {

@@ -10,6 +10,8 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
+import Divider from '@mui/material/Divider';
+import FieldSelector from './FieldSelector';
 import type { CapturedQuery } from '../../shared/types';
 
 interface Props {
@@ -21,8 +23,23 @@ export default function RecentQueries({ queries, onSubscribe }: Props) {
   const [subscribeTarget, setSubscribeTarget] = useState<CapturedQuery | null>(null);
   const [name, setName] = useState('');
   const [interval, setInterval] = useState('5');
+  const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleOpen = (q: CapturedQuery) => {
+    setSubscribeTarget(q);
+    setName(`${q.indexPattern} — ${q.summary}`.slice(0, 60));
+    setInterval('5');
+    setError(null);
+    // Pre-select fields from sampleFields, excluding auto-detected timestamp/level
+    const autoDetected = ['@timestamp', 'timestamp', 'log.level', 'level', 'severity'];
+    const preSelected = (q.sampleFields ?? [])
+      .map(f => f.name)
+      .filter(n => !autoDetected.includes(n))
+      .slice(0, 5);
+    setSelectedFields(preSelected);
+  };
 
   const handleSubscribe = () => {
     if (!subscribeTarget) return;
@@ -36,6 +53,7 @@ export default function RecentQueries({ queries, onSubscribe }: Props) {
           queryId: subscribeTarget.id,
           name,
           pollIntervalMinutes: parseInt(interval, 10),
+          selectedFields,
         },
       },
       (response) => {
@@ -58,6 +76,8 @@ export default function RecentQueries({ queries, onSubscribe }: Props) {
     );
   }
 
+  const dialogFields = subscribeTarget?.sampleFields ?? [];
+
   return (
     <>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -72,16 +92,15 @@ export default function RecentQueries({ queries, onSubscribe }: Props) {
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {new Date(q.capturedAt).toLocaleTimeString()}
+                    {q.sampleFields && q.sampleFields.length > 0 && (
+                      <> · {q.sampleFields.length} fields</>
+                    )}
                   </Typography>
                 </Box>
                 <Button
                   size="small"
                   variant="contained"
-                  onClick={() => {
-                    setSubscribeTarget(q);
-                    setName(`${q.indexPattern} — ${q.summary}`.slice(0, 60));
-                    setInterval('5');
-                  }}
+                  onClick={() => handleOpen(q)}
                   sx={{ ml: 1, whiteSpace: 'nowrap' }}
                 >
                   Subscribe
@@ -113,6 +132,25 @@ export default function RecentQueries({ queries, onSubscribe }: Props) {
             size="small"
             slotProps={{ htmlInput: { min: 1, max: 1440 } }}
           />
+
+          <Divider sx={{ my: 1.5 }} />
+
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+            Fields to include in log message
+          </Typography>
+          {dialogFields.length > 0 ? (
+            <FieldSelector
+              fields={dialogFields}
+              selectedFields={selectedFields}
+              onChange={setSelectedFields}
+            />
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              No field samples available for this query yet. Fields will be captured on next Kibana response.
+              You can still subscribe — all fields will be included by default.
+            </Typography>
+          )}
+
           {error && (
             <Typography color="error" variant="body2" sx={{ mt: 1 }}>
               {error}

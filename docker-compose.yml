@@ -1,6 +1,6 @@
 services:
   db:
-    image: pgvector/pgvector:pg17
+    image: postgres:17
     environment:
       POSTGRES_DB: logjammer
       POSTGRES_USER: logjammer
@@ -24,15 +24,11 @@ services:
       - "5050:8080"
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=logjammer;Username=logjammer;Password=logjammer"
-      Authentication__Username: "admin"
-      Authentication__Password: "changeme"
-      Authentication__ApiToken: "change-this-to-a-random-string"
+      AUTH__PASSWORD: "changeme"
+      AUTH__APIKEY: "changeme"
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - models:/app/models
-      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 30s
@@ -43,4 +39,3 @@ services:
 
 volumes:
   pgdata:
-  models:

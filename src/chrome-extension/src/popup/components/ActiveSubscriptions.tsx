@@ -4,7 +4,10 @@ import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
+import Tooltip from '@mui/material/Tooltip';
 import DeleteIcon from '@mui/icons-material/Delete';
+import PauseIcon from '@mui/icons-material/Pause';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import type { Subscription } from '../../shared/types';
 
 interface Props {
@@ -21,6 +24,18 @@ const statusColors: Record<Subscription['status'], 'success' | 'warning' | 'erro
 export default function ActiveSubscriptions({ subscriptions, onUpdate }: Props) {
   const handleDelete = (id: string) => {
     chrome.runtime.sendMessage({ type: 'UNSUBSCRIBE', payload: { subscriptionId: id } }, () => {
+      onUpdate();
+    });
+  };
+
+  const handlePause = (id: string) => {
+    chrome.runtime.sendMessage({ type: 'PAUSE_SUBSCRIPTION', payload: { subscriptionId: id } }, () => {
+      onUpdate();
+    });
+  };
+
+  const handleResume = (id: string) => {
+    chrome.runtime.sendMessage({ type: 'RESUME_SUBSCRIPTION', payload: { subscriptionId: id } }, () => {
       onUpdate();
     });
   };
@@ -50,6 +65,16 @@ export default function ActiveSubscriptions({ subscriptions, onUpdate }: Props) 
                   Every {sub.pollIntervalMinutes} min
                   {sub.lastPollAt && ` · Last: ${new Date(sub.lastPollAt).toLocaleTimeString()}`}
                 </Typography>
+                {sub.messageTemplate && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                    sx={{ fontFamily: 'monospace', fontSize: 10, mt: 0.25 }}
+                  >
+                    {sub.messageTemplate}
+                  </Typography>
+                )}
                 {sub.lastError && (
                   <Typography
                     variant="caption"
@@ -61,9 +86,26 @@ export default function ActiveSubscriptions({ subscriptions, onUpdate }: Props) 
                   </Typography>
                 )}
               </Box>
-              <IconButton size="small" onClick={() => handleDelete(sub.id)} color="error">
-                <DeleteIcon fontSize="small" />
-              </IconButton>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, ml: 0.5 }}>
+                {sub.status === 'active' ? (
+                  <Tooltip title="Pause">
+                    <IconButton size="small" onClick={() => handlePause(sub.id)} color="warning">
+                      <PauseIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Resume">
+                    <IconButton size="small" onClick={() => handleResume(sub.id)} color="success">
+                      <PlayArrowIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                <Tooltip title="Delete">
+                  <IconButton size="small" onClick={() => handleDelete(sub.id)} color="error">
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </Box>
           </CardContent>
         </Card>

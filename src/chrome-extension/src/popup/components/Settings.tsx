@@ -15,7 +15,7 @@ interface Props {
 
 export default function Settings({ settings, onSave }: Props) {
   const [url, setUrl] = useState(settings.logJammerUrl);
-  const [apiToken, setApiToken] = useState(settings.apiToken);
+  const [apiKey, setApiKey] = useState(settings.apiKey);
   const [maxQueries, setMaxQueries] = useState(String(settings.maxCapturedQueries));
   const [pollInterval, setPollInterval] = useState(String(settings.defaultPollIntervalMinutes ?? 5));
   const [verbose, setVerbose] = useState(settings.verbose ?? false);
@@ -28,7 +28,7 @@ export default function Settings({ settings, onSave }: Props) {
         type: 'UPDATE_SETTINGS',
         payload: {
           logJammerUrl: url.replace(/\/+$/, ''), // trim trailing slash
-          apiToken: apiToken.trim(),
+          apiKey: apiKey.trim(),
           maxCapturedQueries: parseInt(maxQueries, 10) || 50,
           defaultPollIntervalMinutes: parseFloat(pollInterval) || 5,
           verbose,
@@ -55,14 +55,14 @@ export default function Settings({ settings, onSave }: Props) {
         helperText="The URL of your Log Jammer instance"
       />
       <TextField
-        label="API Token"
-        value={apiToken}
-        onChange={(e) => setApiToken(e.target.value)}
+        label="API Key"
+        value={apiKey}
+        onChange={(e) => setApiKey(e.target.value)}
         size="small"
         fullWidth
         type="password"
         placeholder="Optional — required if auth is enabled"
-        helperText="Bearer token for Log Jammer API authentication"
+        helperText="API key sent as X-Api-Key header"
       />
       <TextField
         label="Max captured queries"
@@ -104,7 +104,7 @@ export default function Settings({ settings, onSave }: Props) {
 
       <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
         <Typography variant="caption" color="text.secondary">
-          Log Jammer Kibana Bridge v0.1.0
+          Log Jammer Kibana Bridge v2.0.0
         </Typography>
       </Box>
     </Box>

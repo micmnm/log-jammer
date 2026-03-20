@@ -4,139 +4,163 @@ Base URL: `http://localhost:5050`
 
 ## Authentication
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| POST | `/api/auth/login` | Login with username/password, returns API token | Implemented |
+| Method | Path | Auth required | Description |
+|--------|------|---------------|-------------|
+| POST | `/api/auth/login` | No | Login with password, returns bearer token |
 
-**POST /api/auth/login**: Accepts `{ username: string, password: string }`. Returns `{ token: string }` on success, 401 on invalid credentials. This endpoint is anonymous (no token required).
+**POST /api/auth/login**
+- Body: `LoginRequest` — `{ "password": "..." }`
+- 200: `LoginResponse` — `{ "token": "..." }`
+- 401: `{ "message": "Invalid password" }`
 
-**Token authentication**: All other API endpoints (except `/healthz`, `/openapi`, `/scalar`) require `Authorization: Bearer <token>` header. Configured via `Authentication` section in `appsettings.json` or env vars (`Authentication__Username`, `Authentication__Password`, `Authentication__ApiToken`).
+**Token usage**: All other `/api/*` endpoints require one of:
+- `Authorization: Bearer <token>` — token from `/api/auth/login`
+- `X-Api-Key: <key>` — static API key configured in `appsettings.json` (`Auth__ApiKey`)
+
+Unauthenticated requests to `/api/*` (except `/api/auth/login`) receive `401 Unauthorized`.
+
+---
 
 ## Health
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| GET | `/api/health` | Application health check | Implemented |
-| GET | `/healthz` | Infrastructure health check (DB) | Implemented |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/healthz` | Returns `"ok"` (no auth required) |
+
+---
 
 ## Data Sources
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| GET | `/api/datasources` | List all data sources | Implemented |
-| GET | `/api/datasources/{id}` | Get data source by ID | Implemented |
-| POST | `/api/datasources` | Create data source | Implemented |
-| PUT | `/api/datasources/{id}` | Update data source | Implemented |
-| GET | `/api/datasources/{id}/deletion-impact` | Get cascade deletion impact counts | Implemented |
-| DELETE | `/api/datasources/{id}?preserveHistory=false` | Delete data source (optionally preserve error groups) | Implemented |
-| POST | `/api/datasources/{id}/test` | Test data source connection | Implemented |
-| GET | `/api/datasources/{id}/schema` | Get data source schema | Implemented |
-| GET | `/api/datasources/{id}/sample` | Get sample records (query: count) | Implemented |
-| POST | `/api/datasources/detect` | Auto-detect log file format and propose config | Implemented |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/datasources` | List all data sources, ordered by name |
+| GET | `/api/datasources/{id}` | Get data source by ID |
+| POST | `/api/datasources` | Create a new data source |
+| PUT | `/api/datasources/{id}` | Update a data source (partial update) |
+| DELETE | `/api/datasources/{id}` | Delete a data source |
+| POST | `/api/datasources/{id}/test` | Test Elasticsearch connection |
 
-**GET /api/datasources/{id}/deletion-impact**: Returns counts of all data that would be cascade-deleted: errorGroupCount, occurrenceCount, alertCount, classificationQueueCount, tagCount, ruleCount. Status codes: 200, 404.
+**GET /api/datasources**
+- 200: `DataSourceResponse[]`
 
-**DELETE /api/datasources/{id}?preserveHistory=false**: When `preserveHistory=true`, detaches KnownErrors (sets DataSourceId=null) before deleting the DataSource, preserving error groups and their child data (occurrences, alerts, tags, overrides). When `preserveHistory=false` (default), cascade-deletes everything. Status codes: 204, 404.
+**GET /api/datasources/{id}**
+- 200: `DataSourceResponse`
+- 404
 
-**POST /api/datasources/detect**: Accepts `{ filePath: string }`. Reads up to 200 lines, detects JSON vs text format (>80% JSON parse threshold), infers timestamp/level/message field roles, returns proposed connection config. Path validated against allowed directories. Status codes: 200, 400 (empty file), 403 (path not allowed), 404 (file not found).
+**POST /api/datasources**
+- Body: `CreateDataSourceRequest`
+- 201: `DataSourceResponse` (Location header set)
 
-**LogFile connectionConfig format**: Uses singular `filePath` (not array). Includes `parseMode`, `timestampField`, `levelField`, `messageField`, `regexPattern` (when parseMode=regex).
+**PUT /api/datasources/{id}**
+- Body: `UpdateDataSourceRequest` — null fields are ignored
+- 200: `DataSourceResponse`
+- 404
 
-## Error Groups
+**DELETE /api/datasources/{id}**
+- 204
+- 404
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| GET | `/api/errorgroups` | List error groups (query: dataSourceId, status, severity, page, pageSize) | Implemented |
-| GET | `/api/errorgroups/{id}` | Get error group detail by ID | Implemented |
-| GET | `/api/errorgroups/{id}/occurrences` | Get occurrence history (query: from, to) | Implemented |
-| PUT | `/api/errorgroups/{id}/status` | Update error group status | Implemented |
-| PUT | `/api/errorgroups/{id}/severity` | Update error group severity | Implemented |
+**POST /api/datasources/{id}/test**
+- Only supported for `Elasticsearch` type data sources
+- 200: `{ "success": true }` or `{ "success": false, "message": "..." }`
+- 400: `{ "message": "Connection test is only supported for Elasticsearch data sources" }`
+- 404
 
-## Alerts
+---
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| GET | `/api/alerts` | List alerts (query: status, dataSourceId, page, pageSize) | Implemented |
-| GET | `/api/alerts/{id}` | Get alert by ID | Implemented |
-| POST | `/api/alerts/{id}/acknowledge` | Acknowledge an alert | Implemented |
-| GET | `/api/alerts/history` | List resolved alerts (query: dataSourceId, page, pageSize) | Implemented |
-| GET | `/api/alerts/correlated` | List correlated spike alerts (query: status, page, pageSize) | Implemented |
+## Patterns
 
-## Fingerprint Configs
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/patterns` | List patterns (paged, filterable) |
+| GET | `/api/patterns/{id}` | Get pattern detail with occurrence history and baseline bands |
+| POST | `/api/patterns/{id}/acknowledge` | Mark a pattern as not new |
+| POST | `/api/patterns/acknowledge-all` | Acknowledge all new patterns (optionally scoped to a data source) |
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| GET | `/api/datasources/{dataSourceId}/fingerprint-configs` | List fingerprint configs for data source | Implemented |
-| POST | `/api/datasources/{dataSourceId}/fingerprint-configs` | Create fingerprint config | Implemented |
-| GET | `/api/datasources/{dataSourceId}/fingerprint-configs/{id}` | Get fingerprint config by ID | Implemented |
-| PUT | `/api/datasources/{dataSourceId}/fingerprint-configs/{id}` | Update fingerprint config | Implemented |
-| DELETE | `/api/datasources/{dataSourceId}/fingerprint-configs/{id}` | Delete fingerprint config | Implemented |
+**GET /api/patterns**
 
-## Spike Detection Rules
+Query parameters:
+- `page` (int, default 1)
+- `pageSize` (int, default 50)
+- `dataSourceId` (Guid?)
+- `severity` (Severity?)
+- `isNew` (bool?)
+- `search` (string?) — case-insensitive template substring match
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| GET | `/api/spikedetectionrules` | List all rules | Implemented |
-| GET | `/api/spikedetectionrules/{id}` | Get rule by ID | Implemented |
-| POST | `/api/spikedetectionrules` | Create a rule | Implemented |
-| PUT | `/api/spikedetectionrules/{id}` | Update a rule | Implemented |
-| DELETE | `/api/spikedetectionrules/{id}` | Delete a rule | Implemented |
+- 200: `PagedResult<PatternListItem>`
 
-## Tags
+**GET /api/patterns/{id}**
+- 200: `PatternDetailResponse` — includes last 168h of occurrences and all baseline bands
+- 404
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| GET | `/api/tags` | List all tags | Implemented |
-| GET | `/api/tags/{id}` | Get tag by ID | Implemented |
-| POST | `/api/tags` | Create a tag | Implemented |
-| PUT | `/api/tags/{id}` | Update a tag | Implemented |
-| DELETE | `/api/tags/{id}` | Delete a tag | Implemented |
+**POST /api/patterns/{id}/acknowledge**
+- 204
+- 404
 
-## Configuration
+**POST /api/patterns/acknowledge-all**
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| GET | `/api/configuration` | Get all classification config key/values | Implemented |
-| PUT | `/api/configuration` | Update a configuration value | Implemented |
+Query parameters:
+- `dataSourceId` (Guid?) — if omitted, acknowledges all new patterns across all data sources
 
-## Classification Queue
+- 200: `{ "acknowledged": <count> }`
 
-| Method | Path | Description | Status |
-|--------|------|-------------|--------|
-| GET | `/api/classification/queue` | List pending classification items (query: page, pageSize). Response includes error context: severity, status, firstSeen, lastSeen, totalOccurrences from KnownError | Implemented |
-| GET | `/api/classification/queue/{id}` | Get single classification queue item (includes error context fields) | Implemented |
-| POST | `/api/classification/queue/{id}/approve` | Accept suggested tags (or user-assigned tags for unmatched items) | Implemented |
-| POST | `/api/classification/queue/{id}/reject` | Reject with user-provided tags and optional reason | Implemented |
+---
+
+## Dashboard
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/dashboard` | Summary stats, top anomalies, and newly seen patterns |
+
+**GET /api/dashboard**
+- 200: `DashboardResponse`
+  - `totalPatterns` — total distinct patterns in DB
+  - `newPatternCount` — patterns where `IsNew = true`
+  - `ingestionRatePerHour` — sum of occurrence counts in the current hour window
+  - `topAnomalies` — up to 10 patterns with |StdDevsFromMean| > 1.0, ordered by deviation descending
+  - `newPatterns` — up to 50 most recently first-seen patterns where `IsNew = true`
+
+---
 
 ## Ingest (Push)
 
-| Method | Endpoint | Description | Status |
-|--------|----------|-------------|--------|
-| POST | `/api/ingest/{dataSourceId}` | Push log entries into a KibanaProxy data source | Implemented |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/ingest/{dataSourceId}` | Push log entries into a data source |
 
 **POST /api/ingest/{dataSourceId}**
-- Body: IngestRequest (entries array)
-- 200: IngestResponse with accepted/duplicates/failed counts
-- 400: DataSource is not KibanaProxy type
-- 404: DataSource not found
+- Body: `IngestRequest` — array of up to 10 000 `IngestEntry` items
+- 200: `IngestResponse` — `{ "accepted": <count> }`
+- 400: `{ "message": "Data source is disabled" }`
+- 404: `{ "message": "Data source not found" }`
+
+Notes: Works for both `KibanaProxy` and `Elasticsearch` data source types. The ingestion pipeline runs DrainParser, updates `PatternOccurrence` windows, and stores a new pattern if `IsNewCluster = true`.
+
+---
 
 ## Static Files & SPA
 
 | Path | Description |
 |------|-------------|
 | `/` | Serves `wwwroot/index.html` (React SPA entry point) |
-| `/assets/*` | Static frontend assets (JS, CSS) from `wwwroot/` |
+| `/assets/*` | Static frontend assets from `wwwroot/` |
 | `/*` (non-API, non-file) | Falls back to `index.html` for client-side routing |
 
 Middleware order: `UseDefaultFiles()` → `UseStaticFiles()` → `MapControllers()` → `MapFallbackToFile("index.html")`
 
+---
+
 ## CORS
 
-| Origin | Methods | Status |
-|--------|---------|--------|
-| `http://localhost:5173` | All | Implemented (dev policy) |
+| Origin | Methods | Enabled |
+|--------|---------|---------|
+| `http://localhost:5173` | All | Development only (`DevCors` policy) |
+
+---
 
 ## OpenAPI
+
+Available in development only.
 
 | Path | Description |
 |------|-------------|

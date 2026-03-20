@@ -1,359 +1,349 @@
 import { useState } from 'react';
-import {
-  Box,
-  Typography,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Switch,
-  IconButton,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Alert,
-  Checkbox,
-  FormControlLabel,
-  CircularProgress,
-  Divider,
-  Tooltip,
-} from '@mui/material';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import SchemaIcon from '@mui/icons-material/AccountTree';
-import FingerprintIcon from '@mui/icons-material/Fingerprint';
-import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Switch from '@mui/material/Switch';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContentText from '@mui/material/DialogContentText';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import {
   useDataSources,
-  useDeleteDataSource,
+  useCreateDataSource,
   useUpdateDataSource,
-  useTestConnection,
-  useDeletionImpact,
+  useDeleteDataSource,
 } from '../api/hooks/useDataSources';
-import type { DataSourceResponse, ConnectionTestResponse } from '../api/types';
-import DataSourceDialog from '../components/DataSourceDialog';
-import SchemaMappingDialog from '../components/SchemaMappingDialog';
-import FingerprintConfigDialog from '../components/FingerprintConfigDialog';
+import type { DataSourceResponse, DataSourceType } from '../api/types';
 
-function formatRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = now - then;
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return `${Math.floor(days / 30)}mo ago`;
+function relativeTime(iso: string | null): string {
+  if (!iso) return 'Never';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+interface DataSourceFormState {
+  name: string;
+  type: DataSourceType;
+  connectionConfig: string;
+  messageTemplate: string;
+}
+
+const DEFAULT_FORM: DataSourceFormState = {
+  name: '',
+  type: 'Elasticsearch',
+  connectionConfig: '',
+  messageTemplate: '',
+};
+
+interface DataSourceDialogProps {
+  open: boolean;
+  onClose: () => void;
+  editing: DataSourceResponse | null;
+}
+
+function DataSourceDialog({ open, onClose, editing }: DataSourceDialogProps) {
+  const [form, setForm] = useState<DataSourceFormState>(() =>
+    editing
+      ? {
+          name: editing.name,
+          type: editing.type,
+          connectionConfig: editing.connectionConfig,
+          messageTemplate: editing.messageTemplate ?? '',
+        }
+      : DEFAULT_FORM
+  );
+
+  const create = useCreateDataSource();
+  const update = useUpdateDataSource();
+  const isPending = create.isPending || update.isPending;
+  const error = create.error ?? update.error;
+
+  function handleChange(field: keyof DataSourceFormState, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function handleSubmit() {
+    if (editing) {
+      update.mutate(
+        {
+          id: editing.id,
+          name: form.name,
+          connectionConfig: form.connectionConfig,
+          messageTemplate: form.messageTemplate || undefined,
+        },
+        { onSuccess: onClose }
+      );
+    } else {
+      create.mutate(
+        {
+          name: form.name,
+          type: form.type,
+          connectionConfig: form.connectionConfig,
+          messageTemplate: form.messageTemplate || undefined,
+        },
+        { onSuccess: onClose }
+      );
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{editing ? 'Edit Data Source' : 'Add Data Source'}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+        {error && (
+          <Alert severity="error">
+            {error instanceof Error ? error.message : 'An error occurred'}
+          </Alert>
+        )}
+        <TextField
+          label="Name"
+          value={form.name}
+          onChange={(e) => handleChange('name', e.target.value)}
+          fullWidth
+          required
+          disabled={isPending}
+        />
+        <FormControl fullWidth disabled={!!editing || isPending}>
+          <InputLabel>Type</InputLabel>
+          <Select
+            value={form.type}
+            label="Type"
+            onChange={(e) => handleChange('type', e.target.value as DataSourceType)}
+          >
+            <MenuItem value="Elasticsearch">Elasticsearch</MenuItem>
+            <MenuItem value="KibanaProxy">KibanaProxy</MenuItem>
+          </Select>
+        </FormControl>
+        {form.type === 'KibanaProxy' && (
+          <Alert severity="info">Configured via Chrome extension</Alert>
+        )}
+        <TextField
+          label="Connection Config"
+          value={form.connectionConfig}
+          onChange={(e) => handleChange('connectionConfig', e.target.value)}
+          fullWidth
+          multiline
+          minRows={3}
+          placeholder='{"url": "http://...", "index": "logs-*"}'
+          disabled={isPending}
+          slotProps={{
+            input: {
+              sx: { fontFamily: 'monospace', fontSize: '0.85rem' },
+            },
+          }}
+        />
+        <TextField
+          label="Message Template (optional)"
+          value={form.messageTemplate}
+          onChange={(e) => handleChange('messageTemplate', e.target.value)}
+          fullWidth
+          placeholder="{message}"
+          disabled={isPending}
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={isPending}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleSubmit}
+          disabled={isPending || !form.name}
+        >
+          {isPending ? 'Saving…' : editing ? 'Save' : 'Create'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+interface ConfirmDeleteDialogProps {
+  open: boolean;
+  name: string;
+  onClose: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}
+
+function ConfirmDeleteDialog({
+  open,
+  name,
+  onClose,
+  onConfirm,
+  isPending,
+}: ConfirmDeleteDialogProps) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs">
+      <DialogTitle>Delete Data Source</DialogTitle>
+      <DialogContent>
+        <DialogContentText>
+          Are you sure you want to delete <strong>{name}</strong>? This cannot be undone.
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions sx={{ pb: 2, px: 3 }}>
+        <Button onClick={onClose} disabled={isPending}>
+          Cancel
+        </Button>
+        <Button color="error" variant="contained" onClick={onConfirm} disabled={isPending}>
+          {isPending ? 'Deleting…' : 'Delete'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 }
 
 export default function DataSources() {
   const { data: dataSources, isLoading } = useDataSources();
-  const deleteDataSource = useDeleteDataSource();
-  const updateDataSource = useUpdateDataSource();
-  const testConnection = useTestConnection();
+  const update = useUpdateDataSource();
+  const deleteDs = useDeleteDataSource();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDs, setEditingDs] = useState<DataSourceResponse | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [preserveHistory, setPreserveHistory] = useState(false);
-  const [schemaDs, setSchemaDs] = useState<DataSourceResponse | null>(null);
-  const [fingerprintDs, setFingerprintDs] = useState<DataSourceResponse | null>(null);
-  const [testResult, setTestResult] = useState<{ id: string; result: ConnectionTestResponse } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DataSourceResponse | null>(null);
 
-  const { data: deletionImpact, isLoading: impactLoading } = useDeletionImpact(deleteConfirmId);
-
-  const handleAdd = () => {
-    setEditingDs(null);
-    setDialogOpen(true);
-  };
-
-  const handleEdit = (ds: DataSourceResponse) => {
+  function handleRowClick(ds: DataSourceResponse) {
     setEditingDs(ds);
     setDialogOpen(true);
-  };
+  }
 
-  const handleOpenDeleteDialog = (id: string) => {
-    setPreserveHistory(false);
-    setDeleteConfirmId(id);
-  };
+  function handleAddClick() {
+    setEditingDs(null);
+    setDialogOpen(true);
+  }
 
-  const handleDelete = () => {
-    if (deleteConfirmId) {
-      deleteDataSource.mutate({ id: deleteConfirmId, preserveHistory });
-      setDeleteConfirmId(null);
-    }
-  };
+  function handleDialogClose() {
+    setDialogOpen(false);
+    setEditingDs(null);
+  }
 
-  const handleToggleEnabled = (ds: DataSourceResponse) => {
-    updateDataSource.mutate({ id: ds.id, request: { enabled: !ds.enabled } });
-  };
+  function handleToggleEnabled(ds: DataSourceResponse, e: React.ChangeEvent<HTMLInputElement>) {
+    e.stopPropagation();
+    update.mutate({ id: ds.id, enabled: e.target.checked });
+  }
 
-  const handleTestConnection = (ds: DataSourceResponse) => {
-    setTestResult(null);
-    testConnection.mutate(ds.id, {
-      onSuccess: (result) => setTestResult({ id: ds.id, result }),
+  function handleDeleteClick(ds: DataSourceResponse, e: React.MouseEvent) {
+    e.stopPropagation();
+    setDeleteTarget(ds);
+  }
+
+  function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    deleteDs.mutate(deleteTarget.id, {
+      onSuccess: () => setDeleteTarget(null),
     });
-  };
+  }
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5">Data Sources</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" sx={{ flexGrow: 1, fontWeight: 600 }}>
+          Data Sources
+        </Typography>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={handleAddClick}>
           Add Data Source
         </Button>
       </Box>
 
-      {testResult && (
-        <Alert
-          severity={testResult.result.success ? 'success' : 'error'}
-          onClose={() => setTestResult(null)}
-          sx={{ mb: 2 }}
-        >
-          {testResult.result.success
-            ? `Connection successful (${testResult.result.latencyMs.toFixed(0)}ms)`
-            : `Connection failed: ${testResult.result.errorMessage}`}
-        </Alert>
-      )}
-
       {isLoading ? (
-        <Typography>Loading...</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
+          <CircularProgress />
+        </Box>
       ) : (
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
-                <TableCell>Adapter Type</TableCell>
+                <TableCell>Type</TableCell>
                 <TableCell>Enabled</TableCell>
-                <TableCell>Poll Interval</TableCell>
-                <TableCell>Sampling Budget</TableCell>
-                <TableCell>Last Ingest</TableCell>
+                <TableCell>Last Polled</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {dataSources?.map((ds) => (
-                <TableRow key={ds.id}>
-                  <TableCell>{ds.name}</TableCell>
-                  <TableCell>
-                    <Chip label={ds.adapterType} size="small" />
-                  </TableCell>
-                  <TableCell>
-                    <Switch checked={ds.enabled} onChange={() => handleToggleEnabled(ds)} size="small" />
-                  </TableCell>
-                  <TableCell sx={{ fontFamily: (theme) => theme.fontFamilyMono }}>{ds.pollIntervalSeconds}s</TableCell>
-                  <TableCell sx={{ fontFamily: (theme) => theme.fontFamilyMono }}>{ds.samplingBudget}</TableCell>
-                  <TableCell>
-                    {ds.lastIngestAt ? (
-                      <Tooltip title={new Date(ds.lastIngestAt).toLocaleString()} arrow>
-                        <Typography variant="body2" sx={{ cursor: 'default', fontFamily: (theme) => theme.fontFamilyMono, fontSize: '0.8rem' }}>
-                          {formatRelativeTime(ds.lastIngestAt)}
-                        </Typography>
-                      </Tooltip>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                        Never
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton size="small" onClick={() => handleEdit(ds)} title="Edit">
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => setSchemaDs(ds)} title="Schema Mapping">
-                      <SchemaIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => setFingerprintDs(ds)} title="Fingerprint Config">
-                      <FingerprintIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleTestConnection(ds)}
-                      disabled={testConnection.isPending}
-                      title="Test Connection"
-                    >
-                      <NetworkCheckIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => handleOpenDeleteDialog(ds.id)} title="Delete">
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {dataSources?.length === 0 && (
+              {!dataSources || dataSources.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    <Typography variant="body2" color="text.secondary">
-                      No data sources configured.
-                    </Typography>
+                  <TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                    No data sources configured
                   </TableCell>
                 </TableRow>
+              ) : (
+                dataSources.map((ds) => (
+                  <TableRow key={ds.id} onClick={() => handleRowClick(ds)}>
+                    <TableCell sx={{ fontWeight: 500 }}>{ds.name}</TableCell>
+                    <TableCell sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                      {ds.type}
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={ds.enabled}
+                        onChange={(e) => handleToggleEnabled(ds, e)}
+                        onClick={(e) => e.stopPropagation()}
+                        size="small"
+                        color="primary"
+                      />
+                    </TableCell>
+                    <TableCell sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                      {relativeTime(ds.lastPolledAt)}
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={(e) => handleDeleteClick(ds, e)}
+                        aria-label="delete"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
         </TableContainer>
       )}
 
-      <DataSourceDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        dataSource={editingDs}
-      />
-
-      {schemaDs && (
-        <SchemaMappingDialog
-          open={!!schemaDs}
-          onClose={() => setSchemaDs(null)}
-          dataSource={schemaDs}
+      {dialogOpen && (
+        <DataSourceDialog
+          open={dialogOpen}
+          onClose={handleDialogClose}
+          editing={editingDs}
         />
       )}
 
-      {fingerprintDs && (
-        <FingerprintConfigDialog
-          open={!!fingerprintDs}
-          onClose={() => setFingerprintDs(null)}
-          dataSource={fingerprintDs}
+      {deleteTarget && (
+        <ConfirmDeleteDialog
+          open={!!deleteTarget}
+          name={deleteTarget.name}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteConfirm}
+          isPending={deleteDs.isPending}
         />
       )}
-
-      <Dialog open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <WarningAmberIcon color="warning" />
-          Delete Data Source
-        </DialogTitle>
-        <DialogContent>
-          {impactLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-              <CircularProgress size={32} />
-            </Box>
-          ) : deletionImpact ? (
-            <Box>
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                This will permanently delete the data source and all associated data.
-              </Alert>
-
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Cascade impact:
-              </Typography>
-              <Box
-                component="ul"
-                sx={{
-                  pl: 2,
-                  mb: 2,
-                  fontFamily: (theme) => theme.fontFamilyMono,
-                  '& li': { py: 0.25 },
-                }}
-              >
-                {deletionImpact.errorGroupCount > 0 && (
-                  <li>
-                    <Typography variant="body2" component="span" color="error.main">
-                      {deletionImpact.errorGroupCount}
-                    </Typography>{' '}
-                    error group{deletionImpact.errorGroupCount !== 1 ? 's' : ''}
-                  </li>
-                )}
-                {deletionImpact.occurrenceCount > 0 && (
-                  <li>
-                    <Typography variant="body2" component="span" color="error.main">
-                      {deletionImpact.occurrenceCount}
-                    </Typography>{' '}
-                    occurrence{deletionImpact.occurrenceCount !== 1 ? 's' : ''}
-                  </li>
-                )}
-                {deletionImpact.alertCount > 0 && (
-                  <li>
-                    <Typography variant="body2" component="span" color="error.main">
-                      {deletionImpact.alertCount}
-                    </Typography>{' '}
-                    alert{deletionImpact.alertCount !== 1 ? 's' : ''}
-                  </li>
-                )}
-                {deletionImpact.classificationQueueCount > 0 && (
-                  <li>
-                    <Typography variant="body2" component="span" color="error.main">
-                      {deletionImpact.classificationQueueCount}
-                    </Typography>{' '}
-                    classification queue item{deletionImpact.classificationQueueCount !== 1 ? 's' : ''}
-                  </li>
-                )}
-                {deletionImpact.tagCount > 0 && (
-                  <li>
-                    <Typography variant="body2" component="span" color="error.main">
-                      {deletionImpact.tagCount}
-                    </Typography>{' '}
-                    tag assignment{deletionImpact.tagCount !== 1 ? 's' : ''}
-                  </li>
-                )}
-                {deletionImpact.ruleCount > 0 && (
-                  <li>
-                    <Typography variant="body2" component="span" color="error.main">
-                      {deletionImpact.ruleCount}
-                    </Typography>{' '}
-                    spike detection rule{deletionImpact.ruleCount !== 1 ? 's' : ''}
-                  </li>
-                )}
-                {deletionImpact.errorGroupCount === 0 &&
-                  deletionImpact.occurrenceCount === 0 &&
-                  deletionImpact.alertCount === 0 && (
-                    <li>
-                      <Typography variant="body2" color="text.secondary">
-                        No associated data found.
-                      </Typography>
-                    </li>
-                  )}
-              </Box>
-
-              {deletionImpact.errorGroupCount > 0 && (
-                <>
-                  <Divider sx={{ my: 1.5 }} />
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={preserveHistory}
-                        onChange={(e) => setPreserveHistory(e.target.checked)}
-                      />
-                    }
-                    label="Keep historical error groups for future classification"
-                  />
-                  {preserveHistory && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4 }}>
-                      Error groups and their occurrences, alerts, and tags will be preserved but
-                      detached from this data source.
-                    </Typography>
-                  )}
-                </>
-              )}
-            </Box>
-          ) : (
-            <Typography color="text.secondary">
-              Are you sure you want to delete this data source?
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
-          <Button
-            onClick={handleDelete}
-            color="error"
-            variant="contained"
-            disabled={impactLoading}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }

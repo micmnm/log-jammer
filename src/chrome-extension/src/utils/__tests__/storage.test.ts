@@ -32,7 +32,7 @@ describe('StorageManager', () => {
   });
 
   it('saves and retrieves settings', async () => {
-    const custom: ExtensionSettings = { logJammerUrl: 'http://example.com', apiToken: 'test-token', maxCapturedQueries: 100, defaultPollIntervalMinutes: 5, verbose: false, errorDetails: false };
+    const custom: ExtensionSettings = { logJammerUrl: 'http://example.com', apiKey: 'test-key', maxCapturedQueries: 100, defaultPollIntervalMinutes: 5, verbose: false, errorDetails: false };
     await StorageManager.saveSettings(custom);
     const settings = await StorageManager.getSettings();
     expect(settings.logJammerUrl).toBe('http://example.com');
@@ -83,6 +83,8 @@ describe('StorageManager', () => {
       lastPollAt: null,
       lastError: null,
       status: 'active',
+      selectedFields: ['service.name', 'message'],
+      messageTemplate: '{service.name} | {message}',
     };
     await StorageManager.saveSubscription(sub);
     const subs = await StorageManager.getSubscriptions();

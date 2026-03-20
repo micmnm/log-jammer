@@ -1,44 +1,34 @@
 using LogJammer.Api.Dtos;
-using LogJammer.Api.Services;
-using Microsoft.AspNetCore.Authorization;
+using LogJammer.Engine.Data;
+using LogJammer.Engine.Processing;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace LogJammer.Api.Controllers;
 
 [ApiController]
-[Authorize]
-[Route("api/[controller]")]
-public class IngestController(IIngestService ingestService) : ControllerBase
+[Route("api/ingest")]
+public class IngestController(LogJammerDbContext db, IngestionPipeline pipeline) : ControllerBase
 {
     [HttpPost("{dataSourceId:guid}")]
-    public async Task<ActionResult<IngestResponse>> Ingest(
-        Guid dataSourceId,
-        [FromBody] IngestRequest request,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<IngestResponse>> Ingest(Guid dataSourceId, [FromBody] IngestRequest request)
     {
-        try
-        {
-            var entries = request.Entries
-                .Select(e => (e.Timestamp, e.Fields))
-                .ToList();
+        var source = await db.DataSources.AsNoTracking().FirstOrDefaultAsync(d => d.Id == dataSourceId);
+        if (source is null)
+            return NotFound(new { message = "Data source not found" });
 
-            var (accepted, duplicates, failed) = await ingestService.IngestAsync(
-                dataSourceId, entries, cancellationToken);
+        if (!source.Enabled)
+            return BadRequest(new { message = "Data source is disabled" });
 
-            return Ok(new IngestResponse
-            {
-                Accepted = accepted,
-                Duplicates = duplicates,
-                Failed = failed
-            });
-        }
-        catch (KeyNotFoundException ex)
+        var entries = request.Entries.Select(e => new RawLogEntry
         {
-            return Problem(detail: ex.Message, statusCode: 404);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: 400);
-        }
+            Message = e.Message,
+            Timestamp = e.Timestamp,
+            Level = e.Level,
+        }).ToList();
+
+        await pipeline.ProcessEntriesAsync(entries, dataSourceId, source.MessageTemplate);
+
+        return Ok(new IngestResponse(entries.Count));
     }
 }

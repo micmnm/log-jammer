@@ -1,139 +1,122 @@
+using Elastic.Clients.Elasticsearch;
 using LogJammer.Api.Dtos;
-using LogJammer.Api.Services;
-using LogJammer.Core.Interfaces;
-using Microsoft.AspNetCore.Authorization;
+using LogJammer.Engine.Data;
+using LogJammer.Engine.Data.Entities;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace LogJammer.Api.Controllers;
 
 [ApiController]
-[Authorize]
-[Route("api/[controller]")]
-public class DataSourcesController(
-    IDataSourceService dataSourceService,
-    ILogFileDetectService logFileDetectService) : ControllerBase
+[Route("api/datasources")]
+public class DataSourcesController(LogJammerDbContext db) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<DataSourceResponse>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<DataSourceResponse>>> GetAll()
     {
-        var dataSources = await dataSourceService.GetAllAsync(cancellationToken);
-        return Ok(dataSources);
+        var sources = await db.DataSources
+            .AsNoTracking()
+            .OrderBy(d => d.Name)
+            .ToListAsync();
+
+        return Ok(sources.Select(ToResponse));
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<DataSourceResponse>> GetById(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<DataSourceResponse>> GetById(Guid id)
     {
-        var dataSource = await dataSourceService.GetByIdAsync(id, cancellationToken);
-        if (dataSource is null) return Problem(detail: "Data source not found.", statusCode: 404);
-        return Ok(dataSource);
+        var source = await db.DataSources.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
+        if (source is null)
+            return NotFound();
+
+        return Ok(ToResponse(source));
     }
 
     [HttpPost]
-    public async Task<ActionResult<DataSourceResponse>> Create(
-        [FromBody] CreateDataSourceRequest request,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<DataSourceResponse>> Create([FromBody] CreateDataSourceRequest request)
     {
-        var created = await dataSourceService.CreateAsync(request, cancellationToken);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        var source = new DataSource
+        {
+            Id = Guid.NewGuid(),
+            Name = request.Name,
+            Type = request.Type,
+            ConnectionConfig = request.ConnectionConfig,
+            MessageTemplate = request.MessageTemplate,
+            Enabled = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        db.DataSources.Add(source);
+        await db.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetById), new { id = source.Id }, ToResponse(source));
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<DataSourceResponse>> Update(
-        Guid id,
-        [FromBody] UpdateDataSourceRequest request,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<DataSourceResponse>> Update(Guid id, [FromBody] UpdateDataSourceRequest request)
     {
-        var updated = await dataSourceService.UpdateAsync(id, request, cancellationToken);
-        if (updated is null) return Problem(detail: "Data source not found.", statusCode: 404);
-        return Ok(updated);
-    }
+        var source = await db.DataSources.FirstOrDefaultAsync(d => d.Id == id);
+        if (source is null)
+            return NotFound();
 
-    [HttpGet("{id:guid}/deletion-impact")]
-    public async Task<ActionResult<DeletionImpactResponse>> GetDeletionImpact(Guid id, CancellationToken cancellationToken)
-    {
-        var impact = await dataSourceService.GetDeletionImpactAsync(id, cancellationToken);
-        if (impact is null) return Problem(detail: "Data source not found.", statusCode: 404);
-        return Ok(impact);
+        if (request.Name is not null)
+            source.Name = request.Name;
+        if (request.ConnectionConfig is not null)
+            source.ConnectionConfig = request.ConnectionConfig;
+        if (request.MessageTemplate is not null)
+            source.MessageTemplate = request.MessageTemplate;
+        if (request.Enabled.HasValue)
+            source.Enabled = request.Enabled.Value;
+
+        await db.SaveChangesAsync();
+        return Ok(ToResponse(source));
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(
-        Guid id,
-        [FromQuery] bool preserveHistory = false,
-        CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Delete(Guid id)
     {
-        var deleted = await dataSourceService.DeleteAsync(id, preserveHistory, cancellationToken);
-        if (!deleted) return Problem(detail: "Data source not found.", statusCode: 404);
+        var source = await db.DataSources.FirstOrDefaultAsync(d => d.Id == id);
+        if (source is null)
+            return NotFound();
+
+        db.DataSources.Remove(source);
+        await db.SaveChangesAsync();
         return NoContent();
     }
 
     [HttpPost("{id:guid}/test")]
-    public async Task<ActionResult<ConnectionTestResponse>> TestConnection(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> TestConnection(Guid id)
     {
-        var result = await dataSourceService.TestConnectionAsync(id, cancellationToken);
-        if (result is null) return Problem(detail: "Data source not found.", statusCode: 404);
-        return Ok(result);
-    }
+        var source = await db.DataSources.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
+        if (source is null)
+            return NotFound();
 
-    [HttpGet("{id:guid}/schema")]
-    public async Task<ActionResult<SchemaResponse>> GetSchema(Guid id, CancellationToken cancellationToken)
-    {
-        var schema = await dataSourceService.GetSchemaAsync(id, cancellationToken);
-        if (schema is null) return Problem(detail: "Data source not found.", statusCode: 404);
-        return Ok(schema);
-    }
+        if (source.Type != DataSourceType.Elasticsearch)
+            return BadRequest(new { message = "Connection test is only supported for Elasticsearch data sources" });
 
-    [HttpGet("{id:guid}/sample")]
-    public async Task<ActionResult<SampleRecordsResponse>> GetSampleRecords(
-        Guid id,
-        [FromQuery] int count = 10,
-        CancellationToken cancellationToken = default)
-    {
-        var records = await dataSourceService.GetSampleRecordsAsync(id, count, cancellationToken);
-        if (records is null) return Problem(detail: "Data source not found.", statusCode: 404);
-        return Ok(records);
-    }
-
-    [HttpPost("detect")]
-    public async Task<ActionResult<DetectResponse>> Detect(
-        [FromBody] DetectRequest request,
-        CancellationToken cancellationToken)
-    {
         try
         {
-            var result = await logFileDetectService.DetectAsync(request.FilePath, cancellationToken);
-            return Ok(new DetectResponse
-            {
-                DetectedFormat = result.DetectedFormat,
-                Fields = result.Fields.Select(f => new DetectedFieldDto
-                {
-                    Name = f.Name,
-                    Type = f.Type,
-                    ProposedRole = f.ProposedRole
-                }).ToList(),
-                SampleRecords = result.SampleRecords,
-                ProposedConfig = new DetectedConfigDto
-                {
-                    FilePath = result.ProposedConfig.FilePath,
-                    ParseMode = result.ProposedConfig.ParseMode,
-                    TimestampField = result.ProposedConfig.TimestampField,
-                    LevelField = result.ProposedConfig.LevelField,
-                    MessageField = result.ProposedConfig.MessageField,
-                    RegexPattern = result.ProposedConfig.RegexPattern
-                }
-            });
+            var settings = new ElasticsearchClientSettings(new Uri(source.ConnectionConfig));
+            var client = new ElasticsearchClient(settings);
+            var response = await client.PingAsync();
+            if (response.IsSuccess())
+                return Ok(new { success = true });
+
+            return Ok(new { success = false, message = response.DebugInformation });
         }
-        catch (FileNotFoundException)
+        catch (Exception ex)
         {
-            return Problem(detail: "File not found.", statusCode: 404);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Problem(detail: "File path is not in an allowed directory.", statusCode: 403);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: 400);
+            return Ok(new { success = false, message = ex.Message });
         }
     }
+
+    private static DataSourceResponse ToResponse(DataSource source) => new(
+        source.Id,
+        source.Name,
+        source.Type,
+        source.ConnectionConfig,
+        source.MessageTemplate,
+        source.Enabled,
+        source.CreatedAt,
+        source.LastPolledAt);
 }

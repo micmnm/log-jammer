@@ -1,33 +1,20 @@
-import { Chip } from '@mui/material';
-import type { ErrorSeverity } from '../api/types';
-
-const severityColors: Record<ErrorSeverity, 'error' | 'warning' | 'info'> = {
-  Critical: 'error',
-  Warning: 'warning',
-  Info: 'info',
-};
+import Chip from '@mui/material/Chip';
+import type { Severity } from '../api/types';
 
 interface SeverityChipProps {
-  severity: ErrorSeverity;
+  severity: Severity;
 }
 
 export default function SeverityChip({ severity }: SeverityChipProps) {
-  return (
-    <Chip
-      label={severity}
-      color={severityColors[severity]}
-      size="small"
-      sx={
-        severity === 'Critical'
-          ? {
-              animation: 'severityPulse 2s ease-in-out infinite',
-              '@keyframes severityPulse': {
-                '0%, 100%': { boxShadow: '0 0 4px rgba(255, 23, 68, 0.3)' },
-                '50%': { boxShadow: '0 0 12px rgba(255, 23, 68, 0.6), 0 0 20px rgba(255, 23, 68, 0.2)' },
-              },
-            }
-          : undefined
-      }
-    />
-  );
+  switch (severity) {
+    case 'Critical':
+      return <Chip label="Critical" color="error" size="small" variant="filled" />;
+    case 'Error':
+      return <Chip label="Error" color="error" size="small" variant="outlined" />;
+    case 'Warning':
+      return <Chip label="Warning" color="warning" size="small" variant="outlined" />;
+    case 'Info':
+    default:
+      return <Chip label="Info" size="small" variant="outlined" />;
+  }
 }

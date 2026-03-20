@@ -2,26 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace LogJammer.Api.Dtos;
 
-public record IngestRequest
-{
-    [Required]
-    [MinLength(1)]
-    [MaxLength(10000)]
-    public required IReadOnlyList<IngestEntry> Entries { get; init; }
-}
+public record IngestRequest(
+    [MaxLength(10000)] IngestEntry[] Entries);
 
-public record IngestEntry
-{
-    [Required]
-    public DateTime Timestamp { get; init; }
+public record IngestEntry(
+    string Message,
+    DateTimeOffset Timestamp,
+    string? Level);
 
-    [Required]
-    public required Dictionary<string, object?> Fields { get; init; }
-}
-
-public record IngestResponse
-{
-    public int Accepted { get; init; }
-    public int Duplicates { get; init; }
-    public int Failed { get; init; }
-}
+public record IngestResponse(int Accepted);

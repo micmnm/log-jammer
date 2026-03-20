@@ -48,6 +48,8 @@ const itemWithSuggestions: ClassificationQueueResponse = {
   lastSeen: '2025-01-01T12:00:00Z',
   totalOccurrences: 47,
   createdAt: '2025-01-01T00:00:00Z',
+  dataSourceId: 'ds-1',
+  dataSourceName: 'Production ES',
 };
 
 const itemUnmatched: ClassificationQueueResponse = {
@@ -63,6 +65,8 @@ const itemUnmatched: ClassificationQueueResponse = {
   lastSeen: '2025-01-03T00:00:00Z',
   totalOccurrences: 3,
   createdAt: '2025-01-03T00:00:00Z',
+  dataSourceId: null,
+  dataSourceName: null,
 };
 
 describe('ClassificationQueueCard', () => {
