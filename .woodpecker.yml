@@ -1,0 +1,72 @@
+# =============================================================================
+# Woodpecker CI Pipeline for Log Jammer
+# =============================================================================
+# Branch: main - Build, push Docker image, auto-deploy to LKE
+# =============================================================================
+
+when:
+  branch: [main, master]
+  event: [push, manual]
+
+variables:
+  - &dotnet_image mcr.microsoft.com/dotnet/sdk:10.0
+  - &docker_image docker:24
+  - &kubectl_image alpine/k8s:1.29.0
+
+steps:
+  # ---------------------------------------------------------------------------
+  # Build and verify
+  # ---------------------------------------------------------------------------
+  build:
+    image: *dotnet_image
+    commands:
+      - dotnet build src/LogJammer.slnx
+
+  # ---------------------------------------------------------------------------
+  # Build and push Docker image
+  # ---------------------------------------------------------------------------
+  docker:
+    image: *docker_image
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DOCKER_REGISTRY:
+        from_secret: docker_registry
+      DOCKER_REGISTRY_USER:
+        from_secret: docker_registry_user
+      DOCKER_REGISTRY_PASSWORD:
+        from_secret: docker_registry_password
+    commands:
+      - docker login -u "$DOCKER_REGISTRY_USER" -p "$DOCKER_REGISTRY_PASSWORD" "$DOCKER_REGISTRY"
+      - docker build -t "$DOCKER_REGISTRY/log-jammer:$(date +%Y%m%d)-${CI_PIPELINE_NUMBER}" -t "$DOCKER_REGISTRY/log-jammer:latest" -f src/LogJammer.Api/Dockerfile src/
+      - docker push "$DOCKER_REGISTRY/log-jammer:$(date +%Y%m%d)-${CI_PIPELINE_NUMBER}"
+      - docker push "$DOCKER_REGISTRY/log-jammer:latest"
+    depends_on: [build]
+
+  # ---------------------------------------------------------------------------
+  # Deploy to LKE
+  # ---------------------------------------------------------------------------
+  deploy:
+    image: *kubectl_image
+    environment:
+      HOME: /tmp
+      KUBECONFIG_SECRET:
+        from_secret: kubeconfig
+      DOCKER_REGISTRY:
+        from_secret: docker_registry
+    commands:
+      - mkdir -p /tmp/.kube
+      - echo "$KUBECONFIG_SECRET" > /tmp/.kube/config
+      - chmod 600 /tmp/.kube/config
+      - kubectl --kubeconfig=/tmp/.kube/config set image deployment/log-jammer api="$DOCKER_REGISTRY/log-jammer:$(date +%Y%m%d)-${CI_PIPELINE_NUMBER}" -n log-jammer
+      - kubectl --kubeconfig=/tmp/.kube/config rollout status deployment/log-jammer -n log-jammer --timeout=120s
+    depends_on: [docker]
+
+# =============================================================================
+# Required Secrets (configure in Woodpecker UI)
+# =============================================================================
+# docker_registry          - Synology registry URL
+# docker_registry_user     - Registry username
+# docker_registry_password - Registry password
+# kubeconfig               - Kubeconfig for LKE cluster
+# =============================================================================

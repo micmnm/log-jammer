@@ -449,5 +449,8 @@ FodyWeavers.xsd
 src/SampleLog/logs/
 src/SampleLog/*.zip
 
+# Deploy (local k8s manifests)
+deploy/
+
 # Git worktrees
 .worktrees/
