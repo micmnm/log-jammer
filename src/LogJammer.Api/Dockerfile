@@ -6,6 +6,15 @@ RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
+# Stage 1b: Build chrome extension
+FROM node:22-alpine AS extension-build
+RUN apk add --no-cache zip
+WORKDIR /app
+COPY chrome-extension/package*.json ./
+RUN npm ci
+COPY chrome-extension/ .
+RUN npm run build && cd dist && zip -r /app/log-jammer-extension.zip .
+
 # Stage 2: Build .NET
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dotnet-build
 WORKDIR /src
@@ -28,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 
 COPY --from=dotnet-build /app/publish .
 COPY --from=frontend-build /app/dist ./wwwroot
+COPY --from=extension-build /app/log-jammer-extension.zip ./wwwroot/downloads/
 
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080

@@ -8,6 +8,7 @@ import Toolbar from '@mui/material/Toolbar';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import StorageIcon from '@mui/icons-material/Storage';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const DRAWER_WIDTH = 240;
@@ -16,6 +17,7 @@ const navItems = [
   { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
   { label: 'Patterns', path: '/patterns', icon: <ListAltIcon /> },
   { label: 'Data Sources', path: '/data-sources', icon: <StorageIcon /> },
+  { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
 ];
 
 export default function Sidebar() {

@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import DataSources from './pages/DataSources';
 import Patterns from './pages/Patterns';
 import PatternDetail from './pages/PatternDetail';
+import Settings from './pages/Settings';
 import type { ReactNode } from 'react';
 
 interface ProtectedRouteProps {
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/patterns" element={<Patterns />} />
         <Route path="/data-sources" element={<DataSources />} />
         <Route path="/patterns/:id" element={<PatternDetail />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
