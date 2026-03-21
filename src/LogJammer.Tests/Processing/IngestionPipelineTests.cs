@@ -7,7 +7,8 @@ using Xunit;
 
 namespace LogJammer.Tests.Processing;
 
-public class IngestionPipelineTests(DatabaseFixture db) : IClassFixture<DatabaseFixture>
+[Collection("Database")]
+public class IngestionPipelineTests(DatabaseFixture db)
 {
     [Fact]
     public async Task ProcessEntries_CreatesPatternAndOccurrence()

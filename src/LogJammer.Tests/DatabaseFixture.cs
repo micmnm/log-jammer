@@ -5,6 +5,9 @@ using Xunit;
 
 namespace LogJammer.Tests;
 
+[CollectionDefinition("Database")]
+public class DatabaseCollection : ICollectionFixture<DatabaseFixture>;
+
 public class DatabaseFixture : IAsyncLifetime
 {
     private const string DefaultConnectionString =
@@ -23,27 +26,9 @@ public class DatabaseFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        // Ensure test database exists
-        var builder = new NpgsqlConnectionStringBuilder(ConnectionString);
-        var dbName = builder.Database!;
-        builder.Database = "postgres";
-
-        await using var conn = new NpgsqlConnection(builder.ConnectionString);
-        await conn.OpenAsync();
-
-        await using var checkCmd = conn.CreateCommand();
-        checkCmd.CommandText = $"SELECT 1 FROM pg_database WHERE datname = '{dbName}'";
-        var exists = await checkCmd.ExecuteScalarAsync() is not null;
-
-        if (!exists)
-        {
-            await using var createCmd = conn.CreateCommand();
-            createCmd.CommandText = $"CREATE DATABASE \"{dbName}\"";
-            await createCmd.ExecuteNonQueryAsync();
-        }
-
         await using var db = CreateDbContext();
-        await db.Database.MigrateAsync();
+        await db.Database.EnsureDeletedAsync();
+        await db.Database.EnsureCreatedAsync();
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

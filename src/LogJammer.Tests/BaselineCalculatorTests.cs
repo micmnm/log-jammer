@@ -5,7 +5,8 @@ using Xunit;
 
 namespace LogJammer.Tests;
 
-public class BaselineCalculatorTests(DatabaseFixture db) : IClassFixture<DatabaseFixture>
+[Collection("Database")]
+public class BaselineCalculatorTests(DatabaseFixture db)
 {
     [Fact]
     public async Task RecalculateBaselines_ComputesAvgAndStdDev()
