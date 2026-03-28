@@ -12,7 +12,8 @@ public record UpdateDataSourceRequest(
     string? Name,
     string? ConnectionConfig,
     string? MessageTemplate,
-    bool? Enabled);
+    bool? Enabled,
+    int Version);
 
 public record DataSourceResponse(
     Guid Id,
@@ -22,6 +23,7 @@ public record DataSourceResponse(
     string? MessageTemplate,
     bool Enabled,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? LastPolledAt);
+    DateTimeOffset? LastPolledAt,
+    int Version);
 
 public record FieldInfo(string Name, string? SampleValue);
