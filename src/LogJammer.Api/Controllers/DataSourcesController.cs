@@ -59,6 +59,9 @@ public class DataSourcesController(LogJammerDbContext db) : ControllerBase
         if (source is null)
             return NotFound();
 
+        if (request.Version != source.Version)
+            return Conflict(new { error = "conflict", message = "DataSource was modified by another client", currentVersion = source.Version });
+
         if (request.Name is not null)
             source.Name = request.Name;
         if (request.ConnectionConfig is not null)
@@ -68,7 +71,17 @@ public class DataSourcesController(LogJammerDbContext db) : ControllerBase
         if (request.Enabled.HasValue)
             source.Enabled = request.Enabled.Value;
 
-        await db.SaveChangesAsync();
+        source.Version++;
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { error = "conflict", message = "DataSource was modified by another client", currentVersion = source.Version });
+        }
+
         return Ok(ToResponse(source));
     }
 
@@ -118,5 +131,6 @@ public class DataSourcesController(LogJammerDbContext db) : ControllerBase
         source.MessageTemplate,
         source.Enabled,
         source.CreatedAt,
-        source.LastPolledAt);
+        source.LastPolledAt,
+        source.Version);
 }
