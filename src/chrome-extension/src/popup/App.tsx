@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Typography from '@mui/material/Typography';
+import { Snackbar, Alert } from '@mui/material';
 import RecentQueries from './components/RecentQueries';
 import ActiveSubscriptions from './components/ActiveSubscriptions';
 import Settings from './components/Settings';
@@ -13,6 +14,7 @@ export default function App() {
   const [queries, setQueries] = useState<CapturedQuery[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [settings, setSettings] = useState<ExtensionSettings | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const refreshState = () => {
     chrome.runtime.sendMessage({ type: 'GET_STATE' }, (response) => {
@@ -25,6 +27,20 @@ export default function App() {
   };
 
   useEffect(() => { refreshState(); }, []);
+
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'SYNC_FROM_SERVER' }, (result) => {
+      if (!result) return;
+      const parts: string[] = [];
+      if (result.restored > 0) parts.push(`${result.restored} restored`);
+      if (result.updated > 0) parts.push(`${result.updated} updated`);
+      if (result.removed > 0) parts.push(`${result.removed} removed`);
+      if (parts.length > 0) {
+        setSyncMessage(`Synced: ${parts.join(', ')}`);
+        refreshState();
+      }
+    });
+  }, []);
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -46,6 +62,16 @@ export default function App() {
         {tab === 1 && <ActiveSubscriptions subscriptions={subscriptions} onUpdate={refreshState} />}
         {tab === 2 && settings && <Settings settings={settings} onSave={refreshState} />}
       </Box>
+      <Snackbar
+        open={syncMessage !== null}
+        autoHideDuration={4000}
+        onClose={() => setSyncMessage(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert severity="info" onClose={() => setSyncMessage(null)} sx={{ width: '100%' }}>
+          {syncMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
