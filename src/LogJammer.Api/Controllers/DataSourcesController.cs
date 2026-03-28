@@ -79,7 +79,8 @@ public class DataSourcesController(LogJammerDbContext db) : ControllerBase
         }
         catch (DbUpdateConcurrencyException)
         {
-            return Conflict(new { error = "conflict", message = "DataSource was modified by another client", currentVersion = source.Version });
+            var current = await db.DataSources.AsNoTracking().FirstAsync(d => d.Id == id);
+            return Conflict(new { error = "conflict", message = "DataSource was modified by another client", currentVersion = current.Version });
         }
 
         return Ok(ToResponse(source));

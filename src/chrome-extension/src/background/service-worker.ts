@@ -155,7 +155,6 @@ async function handleSubscribe(payload: {
           lastSubscribedAt: new Date().toISOString(),
         } satisfies KibanaProxyConfig),
         messageTemplate,
-        pollIntervalSeconds: pollIntervalMinutes * 60,
         enabled: true,
       }),
     });

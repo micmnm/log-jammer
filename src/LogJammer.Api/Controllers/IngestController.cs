@@ -50,9 +50,17 @@ public class IngestController(LogJammerDbContext db, IngestionPipeline pipeline)
 
         await pipeline.ProcessEntriesAsync(entries, dataSourceId, source.MessageTemplate);
 
-        // Update LastPolledAt
+        // Update LastPolledAt — ignore concurrency conflicts since this is just a timestamp update
         source.LastPolledAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another client updated the DataSource concurrently — the ingest still succeeded,
+            // so just log and continue. LastPolledAt will be updated on the next successful ingest.
+        }
 
         return Ok(new IngestResponse(entries.Count));
     }
