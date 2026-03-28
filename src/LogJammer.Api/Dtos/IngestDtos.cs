@@ -10,4 +10,4 @@ public record IngestEntry(
     DateTimeOffset Timestamp,
     string? Level);
 
-public record IngestResponse(int Accepted);
+public record IngestResponse(int Accepted, bool Skipped = false, string? Reason = null);
