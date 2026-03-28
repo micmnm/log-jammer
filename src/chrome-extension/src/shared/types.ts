@@ -28,6 +28,8 @@ export interface Subscription {
   messageTemplate: string;
   /** Snapshot of the captured query at subscription time — immune to query rotation */
   querySnapshot?: CapturedQuery;
+  /** Server-side version for optimistic concurrency */
+  version: number;
 }
 
 export interface ExtensionSettings {
@@ -40,7 +42,7 @@ export interface ExtensionSettings {
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  logJammerUrl: 'http://localhost:5000',
+  logJammerUrl: 'http://localhost:5050',
   apiKey: '',
   maxCapturedQueries: 50,
   defaultPollIntervalMinutes: 5,
@@ -58,4 +60,39 @@ export interface IngestResponse {
   accepted: number;
   duplicates: number;
   failed: number;
+  skipped?: boolean;
+  reason?: string;
+}
+
+/** Shape of DataSourceResponse from the Log Jammer API */
+export interface DataSourceResponse {
+  id: string;
+  name: string;
+  type: string;
+  connectionConfig: string;
+  messageTemplate: string | null;
+  enabled: boolean;
+  createdAt: string;
+  lastPolledAt: string | null;
+  version: number;
+}
+
+/** KibanaProxy ConnectionConfig stored server-side */
+export interface KibanaProxyConfig {
+  kibanaUrl: string;
+  indexPattern: string;
+  queryDsl: Record<string, unknown>;
+  fullRequestBody?: Record<string, unknown>;
+  selectedFields: string[];
+  messageTemplate: string;
+  pollIntervalMinutes: number;
+  subscriptionStatus: 'active' | 'paused';
+  lastSubscribedAt: string;
+}
+
+/** Sync status toast notification */
+export interface SyncResult {
+  restored: number;
+  updated: number;
+  removed: number;
 }
