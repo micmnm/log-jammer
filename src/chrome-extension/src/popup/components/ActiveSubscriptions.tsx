@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -5,9 +6,13 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
+import TextField from '@mui/material/TextField';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import EditIcon from '@mui/icons-material/Edit';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import type { Subscription } from '../../shared/types';
 
 interface Props {
@@ -22,6 +27,9 @@ const statusColors: Record<Subscription['status'], 'success' | 'warning' | 'erro
 };
 
 export default function ActiveSubscriptions({ subscriptions, onUpdate }: Props) {
+  const [editingInterval, setEditingInterval] = useState<string | null>(null);
+  const [intervalValue, setIntervalValue] = useState<number>(5);
+
   const handleDelete = (id: string) => {
     chrome.runtime.sendMessage({ type: 'UNSUBSCRIBE', payload: { subscriptionId: id } }, () => {
       onUpdate();
@@ -61,10 +69,53 @@ export default function ActiveSubscriptions({ subscriptions, onUpdate }: Props) 
                   </Typography>
                   <Chip label={sub.status} size="small" color={statusColors[sub.status]} />
                 </Box>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Every {sub.pollIntervalMinutes} min
-                  {sub.lastPollAt && ` · Last: ${new Date(sub.lastPollAt).toLocaleTimeString()}`}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                  {editingInterval === sub.id ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                      <TextField
+                        size="small"
+                        type="number"
+                        value={intervalValue}
+                        onChange={(e) => setIntervalValue(Number(e.target.value))}
+                        inputProps={{ min: 1, max: 1440, step: 1 }}
+                        sx={{ width: 80 }}
+                      />
+                      <Typography variant="caption">min</Typography>
+                      <IconButton size="small" onClick={() => {
+                        chrome.runtime.sendMessage({
+                          type: 'UPDATE_POLL_INTERVAL',
+                          payload: { subscriptionId: sub.id, pollIntervalMinutes: intervalValue },
+                        }, () => {
+                          setEditingInterval(null);
+                          onUpdate();
+                        });
+                      }}>
+                        <CheckIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => setEditingInterval(null)}>
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2">Every {sub.pollIntervalMinutes}m</Typography>
+                      <IconButton size="small" onClick={() => {
+                        setEditingInterval(sub.id);
+                        setIntervalValue(sub.pollIntervalMinutes);
+                      }}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  )}
+                  <Typography variant="caption" color="text.secondary">
+                    v{sub.version ?? '?'}
+                  </Typography>
+                </Box>
+                {sub.lastPollAt && (
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Last: {new Date(sub.lastPollAt).toLocaleTimeString()}
+                  </Typography>
+                )}
                 {sub.messageTemplate && (
                   <Typography
                     variant="caption"
