@@ -54,6 +54,7 @@ Two authentication methods are accepted for all `/api/*` endpoints (except `/api
 | Enabled | bool | default true |
 | CreatedAt | DateTimeOffset | auto-set |
 | LastPolledAt | DateTimeOffset? | updated by polling service |
+| Version | int | default 1; concurrency check token |
 
 Navigation: `DrainState`, `Patterns` (ICollection<LogPattern>)
 
@@ -128,7 +129,7 @@ Navigation: `Pattern`
 `LogJammer.Api.Dtos.CreateDataSourceRequest` (record)
 - `Name` (string)
 - `Type` (DataSourceType)
-- `ConnectionConfig` (string) — JSON connection config; for Elasticsearch: ES URL string; for KibanaProxy: arbitrary identifier
+- `ConnectionConfig` (string) — JSON connection config; for Elasticsearch: ES URL string; for KibanaProxy: JSON object with `kibanaUrl`, `indexPattern`, `queryDsl`, `fullRequestBody?`, `selectedFields`, `messageTemplate`, `pollIntervalMinutes`, `subscriptionStatus`, `lastSubscribedAt`
 - `MessageTemplate` (string?) — optional Serilog-style message template
 
 #### UpdateDataSourceRequest
@@ -137,6 +138,7 @@ Navigation: `Pattern`
 - `ConnectionConfig` (string?) — null = no change
 - `MessageTemplate` (string?) — null = no change
 - `Enabled` (bool?) — null = no change
+- `Version` (int) — required; must match server version for optimistic concurrency
 
 #### DataSourceResponse
 `LogJammer.Api.Dtos.DataSourceResponse` (record)
@@ -148,6 +150,7 @@ Navigation: `Pattern`
 - `Enabled` (bool)
 - `CreatedAt` (DateTimeOffset)
 - `LastPolledAt` (DateTimeOffset?)
+- `Version` (int)
 
 #### FieldInfo
 `LogJammer.Api.Dtos.FieldInfo` (record)
@@ -171,6 +174,8 @@ Navigation: `Pattern`
 #### IngestResponse
 `LogJammer.Api.Dtos.IngestResponse` (record)
 - `Accepted` (int) — number of entries passed to the ingestion pipeline
+- `Skipped` (bool) — true if rejected by poll interval guard (default false)
+- `Reason` (string?) — explanation when skipped (e.g., "Another client polled 30s ago")
 
 ---
 

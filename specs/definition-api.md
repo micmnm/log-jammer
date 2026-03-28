@@ -52,9 +52,10 @@ Unauthenticated requests to `/api/*` (except `/api/auth/login`) receive `401 Una
 - 201: `DataSourceResponse` (Location header set)
 
 **PUT /api/datasources/{id}**
-- Body: `UpdateDataSourceRequest` — null fields are ignored
+- Body: `UpdateDataSourceRequest` — null fields are ignored; `version` is required
 - 200: `DataSourceResponse`
 - 404
+- 409: `{ "error": "conflict", "message": "DataSource was modified by another client", "currentVersion": <int> }`
 
 **DELETE /api/datasources/{id}**
 - 204
@@ -130,11 +131,11 @@ Query parameters:
 
 **POST /api/ingest/{dataSourceId}**
 - Body: `IngestRequest` — array of up to 10 000 `IngestEntry` items
-- 200: `IngestResponse` — `{ "accepted": <count> }`
+- 200: `IngestResponse` — `{ "accepted": <count>, "skipped": false }` or `{ "accepted": 0, "skipped": true, "reason": "..." }`
 - 400: `{ "message": "Data source is disabled" }`
 - 404: `{ "message": "Data source not found" }`
 
-Notes: Works for both `KibanaProxy` and `Elasticsearch` data source types. The ingestion pipeline runs DrainParser, updates `PatternOccurrence` windows, and stores a new pattern if `IsNewCluster = true`.
+Notes: Works for both `KibanaProxy` and `Elasticsearch` data source types. For KibanaProxy, a poll interval guard rejects requests that arrive within 50% of the configured `pollIntervalMinutes` since `LastPolledAt`, returning `skipped: true` to prevent duplicate ingestion from multiple browser instances. The ingestion pipeline runs DrainParser, updates `PatternOccurrence` windows, and stores a new pattern if `IsNewCluster = true`.
 
 ---
 
