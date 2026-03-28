@@ -85,6 +85,7 @@ describe('StorageManager', () => {
       status: 'active',
       selectedFields: ['service.name', 'message'],
       messageTemplate: '{service.name} | {message}',
+      version: 1,
     };
     await StorageManager.saveSubscription(sub);
     const subs = await StorageManager.getSubscriptions();

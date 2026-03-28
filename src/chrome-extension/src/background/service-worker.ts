@@ -1,7 +1,7 @@
 // src/chrome-extension/src/background/service-worker.ts
 import { StorageManager } from '../utils/storage';
 import { summarizeQuery, extractIndexPattern } from '../shared/kibana-query-parser';
-import type { CapturedQuery, Subscription, IngestEntry, IngestResponse } from '../shared/types';
+import type { CapturedQuery, Subscription, IngestEntry, IngestResponse, DataSourceResponse, KibanaProxyConfig, SyncResult } from '../shared/types';
 
 // --- Verbose logging helper ---
 
@@ -61,6 +61,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === 'KIBANA_SESSION_ACTIVE') {
     resumePausedSubscriptions().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (message.type === 'SYNC_FROM_SERVER') {
+    syncFromServer().then(result => sendResponse(result));
+    return true;
+  }
+
+  if (message.type === 'UPDATE_POLL_INTERVAL') {
+    handleUpdatePollInterval(message.payload).then(result => sendResponse(result));
     return true;
   }
 });
@@ -137,8 +147,13 @@ async function handleSubscribe(payload: {
           kibanaUrl: query.kibanaUrl,
           indexPattern: query.indexPattern,
           queryDsl: query.queryDsl,
-          capturedAt: query.capturedAt,
-        }),
+          fullRequestBody: query.fullRequestBody,
+          selectedFields: payload.selectedFields,
+          messageTemplate,
+          pollIntervalMinutes,
+          subscriptionStatus: 'active',
+          lastSubscribedAt: new Date().toISOString(),
+        } satisfies KibanaProxyConfig),
         messageTemplate,
         pollIntervalSeconds: pollIntervalMinutes * 60,
         enabled: true,
@@ -164,6 +179,7 @@ async function handleSubscribe(payload: {
       selectedFields,
       messageTemplate,
       querySnapshot: query,
+      version: (dataSource as DataSourceResponse).version ?? 1,
     };
 
     await StorageManager.saveSubscription(subscription);
@@ -215,6 +231,11 @@ async function handlePauseSubscription(subscriptionId: string): Promise<void> {
   sub.status = 'paused';
   sub.lastError = null;
   await StorageManager.saveSubscription(sub);
+  const newVersionPause = await pushSubscriptionToServer(sub);
+  if (newVersionPause !== null) {
+    sub.version = newVersionPause;
+    await StorageManager.saveSubscription(sub);
+  }
   log(`Subscription "${sub.name}" paused manually`);
   updateBadge(subscriptions.map(s => s.id === subscriptionId ? sub : s));
 }
@@ -226,12 +247,48 @@ async function handleResumeSubscription(subscriptionId: string): Promise<void> {
   sub.status = 'active';
   sub.lastError = null;
   await StorageManager.saveSubscription(sub);
+  const newVersionResume = await pushSubscriptionToServer(sub);
+  if (newVersionResume !== null) {
+    sub.version = newVersionResume;
+    await StorageManager.saveSubscription(sub);
+  }
   chrome.alarms.create(`poll_${sub.id}`, {
     periodInMinutes: sub.pollIntervalMinutes,
     delayInMinutes: 0.5,
   });
   log(`Subscription "${sub.name}" resumed manually`);
   updateBadge(subscriptions.map(s => s.id === subscriptionId ? sub : s));
+}
+
+async function handleUpdatePollInterval(payload: {
+  subscriptionId: string;
+  pollIntervalMinutes: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const subscriptions = await StorageManager.getSubscriptions();
+  const sub = subscriptions.find(s => s.id === payload.subscriptionId);
+  if (!sub) return { ok: false, error: 'Subscription not found' };
+
+  sub.pollIntervalMinutes = payload.pollIntervalMinutes;
+  await StorageManager.saveSubscription(sub);
+
+  // Update alarm
+  chrome.alarms.clear(`poll_${sub.id}`);
+  if (sub.status === 'active') {
+    chrome.alarms.create(`poll_${sub.id}`, {
+      periodInMinutes: payload.pollIntervalMinutes,
+      delayInMinutes: 0.5,
+    });
+  }
+
+  // Push to server
+  const newVersion = await pushSubscriptionToServer(sub);
+  if (newVersion !== null) {
+    sub.version = newVersion;
+    await StorageManager.saveSubscription(sub);
+  }
+
+  log(`Updated poll interval for "${sub.name}" to ${payload.pollIntervalMinutes}m`);
+  return { ok: true };
 }
 
 function updateBadge(subscriptions: Subscription[]): void {
@@ -454,8 +511,14 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
       log(`Poll "${subscription.name}" ingest failed — ${ingestResponse.status}`);
     } else {
       const result = await ingestResponse.json() as IngestResponse;
+      if (result.skipped) {
+        log(`Poll "${subscription.name}" skipped — ${result.reason}`);
+        // Don't update lastPollAt — another client is handling this
+        await StorageManager.saveSubscription(subscription);
+        return;
+      }
       subscription.lastError = null;
-      log(`Poll "${subscription.name}" complete — ${result.accepted} new, ${result.duplicates} duplicate entries`);
+      log(`Poll "${subscription.name}" complete — ${result.accepted} new entries`);
     }
 
     subscription.lastPollAt = new Date().toISOString();
@@ -606,6 +669,181 @@ async function resumePausedSubscriptions(): Promise<void> {
   }
 }
 
+// --- Server sync ---
+
+async function buildApiHeaders(): Promise<Record<string, string>> {
+  const settings = await StorageManager.getSettings();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (settings.apiKey) headers['X-Api-Key'] = settings.apiKey;
+  return headers;
+}
+
+async function getApiUrl(): Promise<string> {
+  const settings = await StorageManager.getSettings();
+  return settings.logJammerUrl;
+}
+
+function buildConnectionConfig(subscription: Subscription): string {
+  const query = subscription.querySnapshot;
+  const config: KibanaProxyConfig = {
+    kibanaUrl: query?.kibanaUrl ?? '',
+    indexPattern: query?.indexPattern ?? '',
+    queryDsl: query?.queryDsl ?? {},
+    fullRequestBody: query?.fullRequestBody,
+    selectedFields: subscription.selectedFields,
+    messageTemplate: subscription.messageTemplate,
+    pollIntervalMinutes: subscription.pollIntervalMinutes,
+    subscriptionStatus: subscription.status === 'error' ? 'paused' : subscription.status,
+    lastSubscribedAt: new Date().toISOString(),
+  };
+  return JSON.stringify(config);
+}
+
+function subscriptionFromDataSource(ds: DataSourceResponse): Subscription | null {
+  if (ds.type !== 'KibanaProxy') return null;
+
+  let config: KibanaProxyConfig;
+  try {
+    config = JSON.parse(ds.connectionConfig) as KibanaProxyConfig;
+  } catch {
+    return null;
+  }
+
+  // Skip if connectionConfig doesn't have the new sync fields
+  if (!config.selectedFields || !config.messageTemplate) return null;
+
+  const querySnapshot: CapturedQuery = {
+    id: crypto.randomUUID(),
+    kibanaUrl: config.kibanaUrl,
+    proxyEndpoint: '',
+    method: 'POST',
+    indexPattern: config.indexPattern,
+    queryDsl: config.queryDsl,
+    fullRequestBody: config.fullRequestBody,
+    summary: 'Synced from server',
+    capturedAt: config.lastSubscribedAt,
+  };
+
+  return {
+    id: crypto.randomUUID(),
+    queryId: querySnapshot.id,
+    dataSourceId: ds.id,
+    name: ds.name,
+    pollIntervalMinutes: config.pollIntervalMinutes,
+    lastPollAt: ds.lastPolledAt,
+    lastError: null,
+    status: 'paused', // Restored subscriptions start paused
+    selectedFields: config.selectedFields,
+    messageTemplate: config.messageTemplate,
+    querySnapshot,
+    version: ds.version,
+  };
+}
+
+async function syncFromServer(): Promise<SyncResult> {
+  const result: SyncResult = { restored: 0, updated: 0, removed: 0 };
+  const apiUrl = await getApiUrl();
+  const headers = await buildApiHeaders();
+
+  let serverDataSources: DataSourceResponse[];
+  try {
+    const response = await fetch(`${apiUrl}/api/datasources`, { headers });
+    if (!response.ok) {
+      log(`Sync failed — server returned ${response.status}`);
+      return result;
+    }
+    serverDataSources = (await response.json()) as DataSourceResponse[];
+  } catch (err) {
+    log('Sync failed — network error:', err);
+    return result;
+  }
+
+  const kibanaProxySources = serverDataSources.filter(ds => ds.type === 'KibanaProxy');
+  const localSubscriptions = await StorageManager.getSubscriptions();
+
+  const serverIdSet = new Set(kibanaProxySources.map(ds => ds.id));
+  const localByDataSourceId = new Map(localSubscriptions.map(s => [s.dataSourceId, s]));
+
+  // Update or create from server
+  for (const ds of kibanaProxySources) {
+    const local = localByDataSourceId.get(ds.id);
+
+    if (local) {
+      // Exists locally — check if server has newer version
+      if (ds.version > (local.version ?? 0)) {
+        const updated = subscriptionFromDataSource(ds);
+        if (updated) {
+          // Preserve local-only state
+          updated.id = local.id;
+          updated.queryId = local.queryId;
+          updated.status = local.status;
+          updated.lastError = local.lastError;
+          updated.lastPollAt = local.lastPollAt;
+          await StorageManager.saveSubscription(updated);
+          result.updated++;
+          log(`Sync: updated "${ds.name}" to version ${ds.version}`);
+        }
+      }
+    } else {
+      // Not found locally — restore from server
+      const restored = subscriptionFromDataSource(ds);
+      if (restored) {
+        await StorageManager.saveSubscription(restored);
+        result.restored++;
+        log(`Sync: restored "${ds.name}" (paused)`);
+      }
+    }
+  }
+
+  // Remove local subscriptions whose dataSourceId is missing from server
+  for (const local of localSubscriptions) {
+    if (!serverIdSet.has(local.dataSourceId)) {
+      chrome.alarms.clear(`poll_${local.id}`);
+      await clearSeenDocIds(local.id);
+      await StorageManager.removeSubscription(local.id);
+      result.removed++;
+      log(`Sync: removed "${local.name}" (deleted on server)`);
+    }
+  }
+
+  return result;
+}
+
+async function pushSubscriptionToServer(subscription: Subscription): Promise<number | null> {
+  const apiUrl = await getApiUrl();
+  const headers = await buildApiHeaders();
+  const connectionConfig = buildConnectionConfig(subscription);
+
+  try {
+    const response = await fetch(`${apiUrl}/api/datasources/${subscription.dataSourceId}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        connectionConfig,
+        messageTemplate: subscription.messageTemplate,
+        version: subscription.version ?? 1,
+      }),
+    });
+
+    if (response.status === 409) {
+      log(`Sync conflict for "${subscription.name}" — pulling latest`);
+      await syncFromServer();
+      return null;
+    }
+
+    if (response.ok) {
+      const updated = (await response.json()) as DataSourceResponse;
+      return updated.version;
+    }
+
+    log(`Push failed for "${subscription.name}" — ${response.status}`);
+    return null;
+  } catch (err) {
+    log('Push failed — network error:', err);
+    return null;
+  }
+}
+
 // --- Startup: restore alarms for active subscriptions ---
 
 async function restoreAlarms(): Promise<void> {
@@ -617,6 +855,15 @@ async function restoreAlarms(): Promise<void> {
         delayInMinutes: 1,
       });
       log(`Restored alarm for "${sub.name}" (every ${sub.pollIntervalMinutes}m)`);
+    }
+  }
+
+  // Sync from server on startup
+  const settings = await StorageManager.getSettings();
+  if (settings.apiKey) {
+    const result = await syncFromServer();
+    if (result.restored + result.updated + result.removed > 0) {
+      log(`Startup sync: ${result.restored} restored, ${result.updated} updated, ${result.removed} removed`);
     }
   }
 }
