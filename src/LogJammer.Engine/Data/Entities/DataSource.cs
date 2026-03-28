@@ -24,6 +24,9 @@ public class DataSource
 
     public DateTimeOffset? LastPolledAt { get; set; }
 
+    [ConcurrencyCheck]
+    public int Version { get; set; } = 1;
+
     public DrainState? DrainState { get; set; }
     public ICollection<LogPattern> Patterns { get; set; } = [];
 }
