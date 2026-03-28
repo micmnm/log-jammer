@@ -95,7 +95,7 @@ public class IngestPollGuardTests(DatabaseFixture fixture)
             Id = Guid.NewGuid(),
             Name = $"guard-test-es-{Guid.NewGuid():N}",
             Type = DataSourceType.Elasticsearch,
-            ConnectionConfig = "http://localhost:9200",
+            ConnectionConfig = JsonSerializer.Serialize(new { url = "http://localhost:9200" }),
             LastPolledAt = DateTimeOffset.UtcNow.AddSeconds(-10),
         };
         db.DataSources.Add(source);
