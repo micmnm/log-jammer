@@ -1,10 +1,13 @@
-import { useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import Grid from '@mui/material/Grid';
+import Button from '@mui/material/Button';
+import Snackbar from '@mui/material/Snackbar';
 import { useTheme } from '@mui/material/styles';
 import {
   Chart as ChartJS,
@@ -18,7 +21,7 @@ import {
   Filler,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { usePatternDetail } from '../api/hooks/usePatterns';
+import { usePatternDetail, useAcknowledgePattern } from '../api/hooks/usePatterns';
 import SeverityChip from '../components/SeverityChip';
 
 ChartJS.register(
@@ -50,6 +53,19 @@ export default function PatternDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: pattern, isLoading, error } = usePatternDetail(id ?? '');
   const theme = useTheme();
+  const navigate = useNavigate();
+  const acknowledge = useAcknowledgePattern();
+  const [similarMessage, setSimilarMessage] = useState('');
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        void navigate(-1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
 
   if (isLoading) {
     return (
@@ -167,6 +183,33 @@ export default function PatternDetail() {
 
   return (
     <Box>
+      {/* Header with Acknowledge */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Button size="small" onClick={() => void navigate(-1)}>
+          ← Back
+        </Button>
+        {pattern.isNew && (
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => {
+              acknowledge.mutate(pattern.id, {
+                onSuccess: (result) => {
+                  if (result && result.similarCount > 0) {
+                    setSimilarMessage(
+                      `Also acknowledged ${result.similarCount} similar pattern${result.similarCount > 1 ? 's' : ''}`
+                    );
+                  }
+                },
+              });
+            }}
+            disabled={acknowledge.isPending}
+          >
+            Acknowledge
+          </Button>
+        )}
+      </Box>
+
       {/* Template */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="overline" color="text.secondary">
@@ -303,6 +346,13 @@ export default function PatternDetail() {
           </Box>
         )}
       </Paper>
+
+      <Snackbar
+        open={!!similarMessage}
+        autoHideDuration={4000}
+        onClose={() => setSimilarMessage('')}
+        message={similarMessage}
+      />
     </Box>
   );
 }
