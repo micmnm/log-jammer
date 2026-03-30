@@ -550,7 +550,7 @@ function adjustTimeRange(
     if ('range' in clause) {
       const range = clause.range as Record<string, Record<string, unknown>>;
       if ('@timestamp' in range) {
-        range['@timestamp'].gte = lastPollAt;
+        range['@timestamp'].gte = 'now-15m';
         range['@timestamp'].lte = 'now';
         return adjusted;
       }
@@ -559,7 +559,7 @@ function adjustTimeRange(
 
   // No existing range found — add one
   (bool.filter as Record<string, unknown>[]).push({
-    range: { '@timestamp': { gte: lastPollAt, lte: 'now' } }
+    range: { '@timestamp': { gte: 'now-15m', lte: 'now' } }
   });
   return adjusted;
 }
