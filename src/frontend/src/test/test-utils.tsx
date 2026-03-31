@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { render, RenderOptions } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { render, type RenderOptions } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
