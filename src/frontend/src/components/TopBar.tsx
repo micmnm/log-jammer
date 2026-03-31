@@ -69,9 +69,14 @@ export default function TopBar() {
           Log Jammer
         </Typography>
         <Tooltip title={`Auto-refresh: ${refreshLabel}`}>
-          <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ color: 'text.secondary', mr: 1 }}>
-            <SyncIcon fontSize="small" />
-          </IconButton>
+          <Button
+            onClick={(e) => setAnchorEl(e.currentTarget)}
+            startIcon={<SyncIcon fontSize="small" />}
+            size="small"
+            sx={{ color: 'text.secondary', mr: 1, textTransform: 'none', minWidth: 'auto' }}
+          >
+            {refreshLabel}
+          </Button>
         </Tooltip>
         <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
           {refreshOptions.map((opt) => (
