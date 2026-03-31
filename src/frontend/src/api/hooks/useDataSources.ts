@@ -1,13 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost, apiPut, apiDelete } from '../client';
 import type { DataSourceResponse, DataSourceType } from '../types';
+import { useAutoRefresh } from '../../AutoRefreshContext';
 
 const QUERY_KEY = ['datasources'];
 
 export function useDataSources() {
+  const { refreshInterval } = useAutoRefresh();
   return useQuery({
     queryKey: QUERY_KEY,
     queryFn: () => apiGet<DataSourceResponse[]>('/datasources'),
+    refetchInterval: refreshInterval || false,
   });
 }
 

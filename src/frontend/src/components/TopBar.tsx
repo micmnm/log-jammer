@@ -1,23 +1,36 @@
+import { useState } from 'react';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
+import SyncIcon from '@mui/icons-material/Sync';
 import { useAuth } from '../api/hooks/useAuth';
 import { useThemeMode } from '../ThemeContext';
+import { useAutoRefresh } from '../AutoRefreshContext';
 import { useNavigate } from 'react-router-dom';
 
 const modeSequence = ['system', 'light', 'dark'] as const;
+
+const refreshOptions: { label: string; value: 0 | 60_000 | 300_000 }[] = [
+  { label: 'Off', value: 0 },
+  { label: '1m', value: 60_000 },
+  { label: '5m', value: 300_000 },
+];
 
 export default function TopBar() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const { mode, setMode } = useThemeMode();
+  const { refreshInterval, setRefreshInterval } = useAutoRefresh();
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   function cycleMode() {
     const idx = modeSequence.indexOf(mode);
@@ -31,6 +44,8 @@ export default function TopBar() {
       : <SettingsBrightnessIcon fontSize="small" />;
 
   const modeLabel = mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark';
+
+  const refreshLabel = refreshOptions.find(o => o.value === refreshInterval)?.label ?? 'Off';
 
   function handleLogout() {
     logout();
@@ -53,6 +68,22 @@ export default function TopBar() {
         >
           Log Jammer
         </Typography>
+        <Tooltip title={`Auto-refresh: ${refreshLabel}`}>
+          <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ color: 'text.secondary', mr: 1 }}>
+            <SyncIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
+          {refreshOptions.map((opt) => (
+            <MenuItem
+              key={opt.value}
+              selected={refreshInterval === opt.value}
+              onClick={() => { setRefreshInterval(opt.value); setAnchorEl(null); }}
+            >
+              {opt.label}
+            </MenuItem>
+          ))}
+        </Menu>
         <Tooltip title={`Theme: ${modeLabel}`}>
           <IconButton onClick={cycleMode} sx={{ color: 'text.secondary', mr: 1 }}>
             {modeIcon}

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../client';
 import type { PatternListItem, PatternDetailResponse, PagedResult, Severity, AcknowledgeResult } from '../types';
+import { useAutoRefresh } from '../../AutoRefreshContext';
 
 export interface PatternFilters {
   dataSourceId?: string;
@@ -24,10 +25,12 @@ function buildQueryString(filters: PatternFilters): string {
 }
 
 export function usePatterns(filters: PatternFilters = {}) {
+  const { refreshInterval } = useAutoRefresh();
   return useQuery({
     queryKey: ['patterns', filters],
     queryFn: () =>
       apiGet<PagedResult<PatternListItem>>(`/patterns${buildQueryString(filters)}`),
+    refetchInterval: refreshInterval || false,
   });
 }
 

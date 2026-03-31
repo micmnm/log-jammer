@@ -11,6 +11,7 @@ import '@fontsource/nunito-sans/500.css';
 import '@fontsource/nunito-sans/600.css';
 import '@fontsource/nunito-sans/700.css';
 import { ThemeContextProvider } from './ThemeContext';
+import { AutoRefreshProvider } from './AutoRefreshContext';
 import { AuthProvider } from './api/hooks/useAuth';
 import App from './App';
 
@@ -31,9 +32,11 @@ createRoot(rootEl).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ThemeContextProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
+          <AutoRefreshProvider>
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </AutoRefreshProvider>
         </ThemeContextProvider>
       </BrowserRouter>
     </QueryClientProvider>
