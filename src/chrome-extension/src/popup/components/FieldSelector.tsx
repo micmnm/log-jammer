@@ -1,11 +1,15 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
@@ -30,6 +34,8 @@ interface Props {
 }
 
 export default function FieldSelector({ fields, selectedFields, onChange }: Props) {
+  const [search, setSearch] = useState('');
+
   const [order, setOrder] = useState<string[]>(() => {
     // Start with currently selected in their current order, then add remaining fields
     const selected = selectedFields.filter(f => fields.some(fi => fi.name === f));
@@ -86,10 +92,18 @@ export default function FieldSelector({ fields, selectedFields, onChange }: Prop
 
   const showWarning = selectedFields.length > 6;
 
-  // Show fields in the current order
+  // Show fields in the current order, filtered by search
   const orderedFields = order
     .map(name => fields.find(f => f.name === name))
     .filter((f): f is FieldInfo => f !== undefined);
+
+  const filteredFields = useMemo(() => {
+    if (!search) return orderedFields;
+    const term = search.toLowerCase();
+    return orderedFields.filter(
+      f => selectedFields.includes(f.name) || f.name.toLowerCase().includes(term),
+    );
+  }, [orderedFields, search, selectedFields]);
 
   const selectedInOrder = order.filter(f => selectedFields.includes(f));
 
@@ -99,12 +113,38 @@ export default function FieldSelector({ fields, selectedFields, onChange }: Prop
         Select fields to include in the log message. Use arrows to reorder.
       </Typography>
 
-      <Box sx={{ maxHeight: 200, overflowY: 'auto', border: 1, borderColor: 'divider', borderRadius: 1, mb: 1 }}>
-        {orderedFields.map((field, idx) => {
+      <TextField
+        size="small"
+        placeholder="Search fields…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        fullWidth
+        sx={{ mb: 0.5 }}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 16 }} />
+              </InputAdornment>
+            ),
+            endAdornment: search ? (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setSearch('')} sx={{ p: 0.25 }}>
+                  <ClearIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </InputAdornment>
+            ) : null,
+            sx: { fontSize: 12 },
+          },
+        }}
+      />
+
+      <Box sx={{ maxHeight: 400, overflowY: 'auto', border: 1, borderColor: 'divider', borderRadius: 1, mb: 1 }}>
+        {filteredFields.map((field, idx) => {
           const isSelected = selectedFields.includes(field.name);
           const autoLabel = autoDetectLabel(field.name);
           const isFirst = idx === 0;
-          const isLast = idx === orderedFields.length - 1;
+          const isLast = idx === filteredFields.length - 1;
 
           return (
             <Box
@@ -114,7 +154,7 @@ export default function FieldSelector({ fields, selectedFields, onChange }: Prop
                 alignItems: 'center',
                 px: 0.5,
                 py: 0.25,
-                borderBottom: idx < orderedFields.length - 1 ? 1 : 0,
+                borderBottom: idx < filteredFields.length - 1 ? 1 : 0,
                 borderColor: 'divider',
                 bgcolor: isSelected ? 'action.selected' : 'transparent',
               }}
@@ -176,9 +216,9 @@ export default function FieldSelector({ fields, selectedFields, onChange }: Prop
             </Box>
           );
         })}
-        {orderedFields.length === 0 && (
+        {filteredFields.length === 0 && (
           <Typography variant="caption" color="text.secondary" sx={{ p: 1, display: 'block' }}>
-            No fields available. Subscribe to a query after Kibana returns results.
+            {search ? 'No fields match your search.' : 'No fields available. Subscribe to a query after Kibana returns results.'}
           </Typography>
         )}
       </Box>
