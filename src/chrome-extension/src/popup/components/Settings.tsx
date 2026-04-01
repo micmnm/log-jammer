@@ -3,7 +3,6 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import Alert from '@mui/material/Alert';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import type { ExtensionSettings } from '../../shared/types';
@@ -21,8 +20,12 @@ export default function Settings({ settings, onSave }: Props) {
   const [verbose, setVerbose] = useState(settings.verbose ?? false);
   const [errorDetails, setErrorDetails] = useState(settings.errorDetails ?? false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  function markDirty() { setSaved(false); }
 
   const handleSave = () => {
+    setSaving(true);
     chrome.runtime.sendMessage(
       {
         type: 'UPDATE_SETTINGS',
@@ -36,8 +39,8 @@ export default function Settings({ settings, onSave }: Props) {
         },
       },
       () => {
+        setSaving(false);
         setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
         onSave();
       }
     );
@@ -48,16 +51,16 @@ export default function Settings({ settings, onSave }: Props) {
       <TextField
         label="Log Jammer URL"
         value={url}
-        onChange={(e) => setUrl(e.target.value)}
+        onChange={(e) => { setUrl(e.target.value); markDirty(); }}
         size="small"
         fullWidth
-        placeholder="http://localhost:5050"
+        placeholder="https://logjammer.mltru.com"
         helperText="The URL of your Log Jammer instance"
       />
       <TextField
         label="API Key"
         value={apiKey}
-        onChange={(e) => setApiKey(e.target.value)}
+        onChange={(e) => { setApiKey(e.target.value); markDirty(); }}
         size="small"
         fullWidth
         type="password"
@@ -68,7 +71,7 @@ export default function Settings({ settings, onSave }: Props) {
         label="Max captured queries"
         type="number"
         value={maxQueries}
-        onChange={(e) => setMaxQueries(e.target.value)}
+        onChange={(e) => { setMaxQueries(e.target.value); markDirty(); }}
         size="small"
         fullWidth
         slotProps={{ htmlInput: { min: 10, max: 200 } }}
@@ -77,30 +80,34 @@ export default function Settings({ settings, onSave }: Props) {
         label="Default poll interval (minutes)"
         type="number"
         value={pollInterval}
-        onChange={(e) => setPollInterval(e.target.value)}
+        onChange={(e) => { setPollInterval(e.target.value); markDirty(); }}
         size="small"
         fullWidth
         slotProps={{ htmlInput: { min: 0.5, max: 60, step: 0.5 } }}
         helperText="How often subscriptions poll Kibana (min 0.5m)"
       />
       <FormControlLabel
-        control={<Switch checked={verbose} onChange={(e) => setVerbose(e.target.checked)} />}
+        control={<Switch checked={verbose} onChange={(e) => { setVerbose(e.target.checked); markDirty(); }} />}
         label="Verbose logging"
       />
       <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
         Detailed console logs for interceptor and polling
       </Typography>
       <FormControlLabel
-        control={<Switch checked={errorDetails} onChange={(e) => setErrorDetails(e.target.checked)} />}
+        control={<Switch checked={errorDetails} onChange={(e) => { setErrorDetails(e.target.checked); markDirty(); }} />}
         label="Error details"
       />
       <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
         On poll failure, log original captured URL/payload vs actual request URL/payload
       </Typography>
-      <Button variant="contained" onClick={handleSave}>
-        Save Settings
+      <Button
+        variant="contained"
+        onClick={handleSave}
+        disabled={saving}
+        color={saved ? 'success' : 'primary'}
+      >
+        {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save Settings'}
       </Button>
-      {saved && <Alert severity="success" sx={{ py: 0 }}>Settings saved</Alert>}
 
       <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
         <Typography variant="caption" color="text.secondary">

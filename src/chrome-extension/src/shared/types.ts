@@ -42,7 +42,7 @@ export interface ExtensionSettings {
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  logJammerUrl: 'http://localhost:5050',
+  logJammerUrl: 'https://logjammer.mltru.com',
   apiKey: '',
   maxCapturedQueries: 50,
   defaultPollIntervalMinutes: 5,
