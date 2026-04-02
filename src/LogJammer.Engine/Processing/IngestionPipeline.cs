@@ -41,6 +41,7 @@ public class IngestionPipeline(IServiceScopeFactory scopeFactory, DrainConfig? d
                     message = entry.Message;
                 }
 
+                message = MessageSanitizer.Sanitize(message);
                 var severity = SeverityMapper.Map(entry.Level);
                 var result = parser.ParseLogMessage(message);
                 await patternStore.RecordOccurrenceAsync(result, severity, message, dataSourceId, entry.Timestamp);
