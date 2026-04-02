@@ -145,6 +145,7 @@ async function handleSubscribe(payload: {
         type: 'KibanaProxy',
         connectionConfig: JSON.stringify({
           kibanaUrl: query.kibanaUrl,
+          proxyEndpoint: query.proxyEndpoint,
           indexPattern: query.indexPattern,
           queryDsl: query.queryDsl,
           fullRequestBody: query.fullRequestBody,
@@ -397,6 +398,7 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
       subscription.lastError = `Kibana session expired. Visit Kibana to re-authenticate.${details}`;
       await StorageManager.saveSubscription(subscription);
       log(`Poll "${subscription.name}" paused — Kibana session expired`);
+      log(`  ↳ ${query.method} ${pollUrl}\n  ↳ payload: ${pollBody}`);
       const allSubs = await StorageManager.getSubscriptions();
       updateBadge(allSubs);
       return;
@@ -416,6 +418,7 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
       subscription.lastError = `Kibana returned ${kibanaResponse.status}${details}`;
       await StorageManager.saveSubscription(subscription);
       log(`Poll "${subscription.name}" failed — Kibana returned ${kibanaResponse.status}`);
+      log(`  ↳ ${query.method} ${pollUrl}\n  ↳ payload: ${pollBody}\n  ↳ response body: ${errorBody}`);
       return;
     }
 
@@ -686,6 +689,7 @@ function buildConnectionConfig(subscription: Subscription): string {
   const query = subscription.querySnapshot;
   const config: KibanaProxyConfig = {
     kibanaUrl: query?.kibanaUrl ?? '',
+    proxyEndpoint: query?.proxyEndpoint,
     indexPattern: query?.indexPattern ?? '',
     queryDsl: query?.queryDsl ?? {},
     fullRequestBody: query?.fullRequestBody,
@@ -714,7 +718,7 @@ function subscriptionFromDataSource(ds: DataSourceResponse): Subscription | null
   const querySnapshot: CapturedQuery = {
     id: crypto.randomUUID(),
     kibanaUrl: config.kibanaUrl,
-    proxyEndpoint: '',
+    proxyEndpoint: config.proxyEndpoint || '/internal/bsearch',
     method: 'POST',
     indexPattern: config.indexPattern,
     queryDsl: config.queryDsl,

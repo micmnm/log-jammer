@@ -80,6 +80,7 @@ export interface DataSourceResponse {
 /** KibanaProxy ConnectionConfig stored server-side */
 export interface KibanaProxyConfig {
   kibanaUrl: string;
+  proxyEndpoint?: string;
   indexPattern: string;
   queryDsl: Record<string, unknown>;
   fullRequestBody?: Record<string, unknown>;
