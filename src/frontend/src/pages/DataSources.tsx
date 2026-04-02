@@ -90,6 +90,7 @@ function DataSourceDialog({ open, onClose, editing }: DataSourceDialogProps) {
       update.mutate(
         {
           id: editing.id,
+          version: editing.version,
           name: form.name,
           connectionConfig: form.connectionConfig,
           messageTemplate: form.messageTemplate || undefined,
@@ -241,7 +242,7 @@ export default function DataSources() {
 
   function handleToggleEnabled(ds: DataSourceResponse, e: React.ChangeEvent<HTMLInputElement>) {
     e.stopPropagation();
-    update.mutate({ id: ds.id, enabled: e.target.checked });
+    update.mutate({ id: ds.id, version: ds.version, enabled: e.target.checked });
   }
 
   function handleDeleteClick(ds: DataSourceResponse, e: React.MouseEvent) {

@@ -34,6 +34,7 @@ export function useCreateDataSource() {
 
 interface UpdateDataSourceRequest {
   id: string;
+  version: number;
   name?: string;
   connectionConfig?: string;
   messageTemplate?: string;

@@ -10,6 +10,7 @@ export interface DataSourceResponse {
   enabled: boolean;
   createdAt: string;
   lastPolledAt: string | null;
+  version: number;
 }
 
 export interface PatternListItem {
