@@ -367,7 +367,8 @@ async function executePoll(subscription: Subscription, query: CapturedQuery): Pr
 
   try {
     // Build the poll request body — force compress=false so we send/receive plain JSON
-    const pollUrl = `${query.kibanaUrl}${query.proxyEndpoint}`.replace('compress=true', 'compress=false');
+    const endpoint = query.proxyEndpoint || '/internal/bsearch';
+    const pollUrl = `${query.kibanaUrl}${endpoint}`.replace('compress=true', 'compress=false');
     let pollPayload: Record<string, unknown>;
 
     if (query.fullRequestBody) {
