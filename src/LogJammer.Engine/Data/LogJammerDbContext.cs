@@ -10,6 +10,10 @@ public class LogJammerDbContext(DbContextOptions<LogJammerDbContext> options) : 
     public DbSet<LogPattern> LogPatterns => Set<LogPattern>();
     public DbSet<PatternOccurrence> PatternOccurrences => Set<PatternOccurrence>();
     public DbSet<PatternBaseline> PatternBaselines => Set<PatternBaseline>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<UserCredential> UserCredentials => Set<UserCredential>();
+    public DbSet<Invite> Invites => Set<Invite>();
+    public DbSet<SetupToken> SetupTokens => Set<SetupToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -57,6 +61,42 @@ public class LogJammerDbContext(DbContextOptions<LogJammerDbContext> options) : 
                 .WithMany(x => x.Baselines)
                 .HasForeignKey(x => x.PatternId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<User>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.Username).IsUnique();
+        });
+
+        modelBuilder.Entity<UserCredential>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.CredentialId).IsUnique();
+            e.HasOne(x => x.User)
+                .WithMany(x => x.Credentials)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Invite>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasOne(x => x.CreatedBy)
+                .WithMany()
+                .HasForeignKey(x => x.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.UsedBy)
+                .WithMany()
+                .HasForeignKey(x => x.UsedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<SetupToken>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.TokenHash).IsUnique();
         });
     }
 }

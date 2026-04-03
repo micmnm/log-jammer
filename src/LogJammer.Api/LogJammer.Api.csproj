@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
+    <PackageReference Include="Fido2" Version="4.0.0" />
+    <PackageReference Include="Fido2.AspNet" Version="4.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.13.10" />
@@ -11,5 +13,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\LogJammer.Engine\LogJammer.Engine.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Suppress Fido2 transitive dep vulnerability (GHSA-73j8-2gch-69rq) until a patched version is available -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-73j8-2gch-69rq" />
   </ItemGroup>
 </Project>
