@@ -73,29 +73,36 @@ public class AuthController(
         if (setupToken is null)
             return BadRequest(new { message = "Setup token expired" });
 
-        var credential = await webAuthnService.CompleteRegistrationAsync(db, attestationResponse, options);
-
-        var user = new User
+        try
         {
-            Username = username,
-            DisplayName = displayName,
-            IsAdmin = true,
-            CanInvite = true
-        };
+            var credential = await webAuthnService.CompleteRegistrationAsync(db, attestationResponse, options);
 
-        credential.UserId = user.Id;
-        credential.DeviceInfo = Request.Headers.UserAgent.ToString();
+            var user = new User
+            {
+                Username = username,
+                DisplayName = displayName,
+                IsAdmin = true,
+                CanInvite = true
+            };
 
-        db.Users.Add(user);
-        db.UserCredentials.Add(credential);
-        setupToken.UsedAt = now;
-        await db.SaveChangesAsync();
+            credential.UserId = user.Id;
+            credential.DeviceInfo = Request.Headers.UserAgent.ToString();
 
-        HttpContext.Session.Clear();
+            db.Users.Add(user);
+            db.UserCredentials.Add(credential);
+            setupToken.UsedAt = now;
+            await db.SaveChangesAsync();
 
-        var bearerToken = tokenService.CreateToken(user.Id);
-        var userInfo = new UserInfo(user.Id, user.Username, user.DisplayName, user.IsAdmin, user.CanInvite);
-        return Ok(new LoginResponse(bearerToken, userInfo));
+            HttpContext.Session.Clear();
+
+            var bearerToken = tokenService.CreateToken(user.Id);
+            var userInfo = new UserInfo(user.Id, user.Username, user.DisplayName, user.IsAdmin, user.CanInvite);
+            return Ok(new LoginResponse(bearerToken, userInfo));
+        }
+        catch (Fido2VerificationException)
+        {
+            return BadRequest(new { message = "Passkey verification failed" });
+        }
     }
 
     [HttpPost("webauthn/login-options")]
@@ -116,18 +123,29 @@ public class AuthController(
 
         var options = AssertionOptions.FromJson(optionsJson);
 
-        var (credential, newSignCount) = await webAuthnService.CompleteLoginAsync(
-            db, assertionResponse, options);
+        try
+        {
+            var (credential, newSignCount) = await webAuthnService.CompleteLoginAsync(
+                db, assertionResponse, options);
 
-        credential.SignCount = newSignCount;
-        await db.SaveChangesAsync();
+            credential.SignCount = newSignCount;
+            await db.SaveChangesAsync();
 
-        HttpContext.Session.Remove("fido2.login.options");
+            HttpContext.Session.Remove("fido2.login.options");
 
-        var user = credential.User;
-        var bearerToken = tokenService.CreateToken(user.Id);
-        var userInfo = new UserInfo(user.Id, user.Username, user.DisplayName, user.IsAdmin, user.CanInvite);
-        return Ok(new LoginResponse(bearerToken, userInfo));
+            var user = credential.User;
+            var bearerToken = tokenService.CreateToken(user.Id);
+            var userInfo = new UserInfo(user.Id, user.Username, user.DisplayName, user.IsAdmin, user.CanInvite);
+            return Ok(new LoginResponse(bearerToken, userInfo));
+        }
+        catch (Fido2VerificationException)
+        {
+            return BadRequest(new { message = "Passkey verification failed" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPost("webauthn/register-options")]
@@ -155,16 +173,24 @@ public class AuthController(
             return BadRequest(new { message = "No pending registration" });
 
         var options = CredentialCreateOptions.FromJson(optionsJson);
-        var credential = await webAuthnService.CompleteRegistrationAsync(db, attestationResponse, options);
 
-        credential.UserId = userId;
-        credential.DeviceInfo = Request.Headers.UserAgent.ToString();
-        db.UserCredentials.Add(credential);
-        await db.SaveChangesAsync();
+        try
+        {
+            var credential = await webAuthnService.CompleteRegistrationAsync(db, attestationResponse, options);
 
-        HttpContext.Session.Remove("fido2.register.options");
+            credential.UserId = userId;
+            credential.DeviceInfo = Request.Headers.UserAgent.ToString();
+            db.UserCredentials.Add(credential);
+            await db.SaveChangesAsync();
 
-        return Ok(new CredentialResponse(credential.Id, credential.DeviceInfo, credential.CreatedAt));
+            HttpContext.Session.Remove("fido2.register.options");
+
+            return Ok(new CredentialResponse(credential.Id, credential.DeviceInfo, credential.CreatedAt));
+        }
+        catch (Fido2VerificationException)
+        {
+            return BadRequest(new { message = "Passkey verification failed" });
+        }
     }
 
     [HttpGet("~/api/users/me/credentials")]
