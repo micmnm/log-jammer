@@ -36,10 +36,16 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
 builder.Services.AddCors(options =>
+{
     options.AddPolicy("DevCors", policy =>
         policy.WithOrigins("http://localhost:5173")
             .AllowAnyHeader()
-            .AllowAnyMethod()));
+            .AllowAnyMethod());
+    options.AddPolicy("ExtensionCors", policy =>
+        policy.SetIsOriginAllowed(origin => origin.StartsWith("chrome-extension://"))
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+});
 
 var app = builder.Build();
 
@@ -55,6 +61,10 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.MapScalarApiReference();
     app.UseCors("DevCors");
+}
+else
+{
+    app.UseCors("ExtensionCors");
 }
 
 app.UseMiddleware<AuthMiddleware>();

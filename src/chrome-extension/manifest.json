@@ -10,7 +10,8 @@
   ],
   "host_permissions": [
     "http://localhost/*",
-    "https://*.druidplatform.com/*"
+    "https://*.druidplatform.com/*",
+    "https://logjammer.mltru.com/*"
   ],
   "background": {
     "service_worker": "service-worker.js",
@@ -18,13 +19,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
+      "matches": ["http://localhost/*", "https://*.druidplatform.com/*"],
       "js": ["page-interceptor.js"],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["http://*/*", "https://*/*"],
+      "matches": ["http://localhost/*", "https://*.druidplatform.com/*"],
       "js": ["content-script.js"],
       "run_at": "document_start"
     }
