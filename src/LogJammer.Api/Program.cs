@@ -1,3 +1,4 @@
+using Fido2NetLib;
 using LogJammer.Api.Auth;
 using LogJammer.Api.BackgroundServices;
 using LogJammer.Engine;
@@ -18,6 +19,25 @@ builder.Services.AddDbContext<LogJammerDbContext>(options =>
 // Auth
 builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("Auth"));
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddScoped<WebAuthnService>();
+builder.Services.AddSingleton<SetupService>();
+
+// Fido2
+builder.Services.AddFido2(options =>
+{
+    options.ServerDomain = builder.Configuration["Fido2:ServerDomain"]!;
+    options.ServerName = builder.Configuration["Fido2:ServerName"]!;
+    options.Origins = builder.Configuration.GetSection("Fido2:Origins").Get<HashSet<string>>()!;
+});
+
+// Session (needed for WebAuthn challenge storage)
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(10);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+});
 
 // Engine
 builder.Services.AddSingleton(new DrainConfig());
@@ -40,7 +60,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("DevCors", policy =>
         policy.WithOrigins("http://localhost:5173")
             .AllowAnyHeader()
-            .AllowAnyMethod());
+            .AllowAnyMethod()
+            .AllowCredentials());
     options.AddPolicy("ExtensionCors", policy =>
         policy.SetIsOriginAllowed(origin => origin.StartsWith("chrome-extension://"))
             .AllowAnyHeader()
@@ -56,6 +77,12 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
 }
 
+// Bootstrap admin setup
+var setupService = app.Services.GetRequiredService<SetupService>();
+var urls = app.Urls.Any() ? app.Urls.ToArray() : ["http://localhost:5050"];
+await setupService.CheckHttpsAsync(urls);
+await setupService.CheckAndBootstrapAsync(urls.First());
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -67,6 +94,7 @@ else
     app.UseCors("ExtensionCors");
 }
 
+app.UseSession();
 app.UseMiddleware<AuthMiddleware>();
 app.UseDefaultFiles();
 app.UseStaticFiles();
