@@ -14,16 +14,17 @@ public class SetupService(IServiceScopeFactory scopeFactory, ILogger<SetupServic
         if (await db.Users.AnyAsync())
             return;
 
-        // Check for existing valid setup token
+        // Expire any unused setup tokens from previous runs
         var now = DateTimeOffset.UtcNow;
-        var existingToken = await db.SetupTokens
-            .AnyAsync(t => t.UsedAt == null && t.ExpiresAt > now);
+        var unusedTokens = await db.SetupTokens
+            .Where(t => t.UsedAt == null && t.ExpiresAt > now)
+            .ToListAsync();
 
-        if (existingToken)
-        {
-            logger.LogWarning("Setup token already exists but has not been used yet");
-            return;
-        }
+        foreach (var t in unusedTokens)
+            t.ExpiresAt = now;
+
+        if (unusedTokens.Count > 0)
+            await db.SaveChangesAsync();
 
         var rawToken = TokenHasher.GenerateToken();
         var hash = TokenHasher.Hash(rawToken);
