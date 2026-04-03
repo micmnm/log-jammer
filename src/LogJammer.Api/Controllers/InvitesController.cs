@@ -94,12 +94,13 @@ public class InvitesController(
         var options = await webAuthnService.CreateRegistrationOptionsAsync(
             db, request.Username, request.DisplayName);
 
-        HttpContext.Session.SetString("fido2.invite.options", options.ToJson());
+        var optionsJson = options.ToJson();
+        HttpContext.Session.SetString("fido2.invite.options", optionsJson);
         HttpContext.Session.SetString("fido2.invite.token", token);
         HttpContext.Session.SetString("fido2.invite.username", request.Username);
         HttpContext.Session.SetString("fido2.invite.displayName", request.DisplayName);
 
-        return Ok(options);
+        return Content(optionsJson, "application/json");
     }
 
     [HttpPost("{token}/complete")]

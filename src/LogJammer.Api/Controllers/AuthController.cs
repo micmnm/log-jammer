@@ -39,12 +39,13 @@ public class AuthController(
         var options = await webAuthnService.CreateRegistrationOptionsAsync(
             db, request.Username, request.DisplayName);
 
-        HttpContext.Session.SetString("fido2.setup.options", options.ToJson());
+        var optionsJson = options.ToJson();
+        HttpContext.Session.SetString("fido2.setup.options", optionsJson);
         HttpContext.Session.SetString("fido2.setup.token", request.Token);
         HttpContext.Session.SetString("fido2.setup.username", request.Username);
         HttpContext.Session.SetString("fido2.setup.displayName", request.DisplayName);
 
-        return Ok(options);
+        return Content(optionsJson, "application/json");
     }
 
     [HttpPost("setup/register")]
@@ -109,8 +110,9 @@ public class AuthController(
     public async Task<IActionResult> LoginOptions()
     {
         var options = await webAuthnService.CreateLoginOptionsAsync(db);
-        HttpContext.Session.SetString("fido2.login.options", options.ToJson());
-        return Ok(options);
+        var optionsJson = options.ToJson();
+        HttpContext.Session.SetString("fido2.login.options", optionsJson);
+        return Content(optionsJson, "application/json");
     }
 
     [HttpPost("webauthn/login")]
@@ -158,8 +160,9 @@ public class AuthController(
         var options = await webAuthnService.CreateRegistrationOptionsAsync(
             db, user.Username, user.DisplayName, user.Id);
 
-        HttpContext.Session.SetString("fido2.register.options", options.ToJson());
-        return Ok(options);
+        var optionsJson = options.ToJson();
+        HttpContext.Session.SetString("fido2.register.options", optionsJson);
+        return Content(optionsJson, "application/json");
     }
 
     [HttpPost("webauthn/register")]
