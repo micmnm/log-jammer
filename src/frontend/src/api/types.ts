@@ -69,3 +69,50 @@ export interface PagedResult<T> {
   page: number;
   pageSize: number;
 }
+
+// Auth types
+export interface AuthStatusResponse {
+  initialized: boolean;
+}
+
+export interface UserInfo {
+  id: string;
+  username: string;
+  displayName: string;
+  isAdmin: boolean;
+  canInvite: boolean;
+}
+
+export interface AuthLoginResponse {
+  token: string;
+  user: UserInfo;
+}
+
+export interface CredentialInfo {
+  id: string;
+  deviceInfo: string | null;
+  createdAt: string;
+}
+
+// Invite types
+export interface InviteResponse {
+  id: string;
+  grantCanInvite: boolean;
+  expiresAt: string;
+  usedByUsername: string | null;
+  usedAt: string | null;
+  createdAt: string;
+  inviteUrl: string | null;
+}
+
+// User management types
+export interface UserResponse {
+  id: string;
+  username: string;
+  displayName: string;
+  isAdmin: boolean;
+  canInvite: boolean;
+  isDisabled: boolean;
+  createdAt: string;
+  invitedBy: string | null;
+}
