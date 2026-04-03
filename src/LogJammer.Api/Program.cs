@@ -79,8 +79,9 @@ using (var scope = app.Services.CreateScope())
 
 // Bootstrap admin setup
 var setupService = app.Services.GetRequiredService<SetupService>();
-var fido2Origins = builder.Configuration.GetSection("Fido2:Origins").Get<string[]>() ?? [];
-var baseUrl = fido2Origins.FirstOrDefault() ?? (app.Urls.Any() ? app.Urls.First() : "http://localhost:5050");
+var baseUrl = builder.Configuration["BaseUrl"]
+    ?? builder.Configuration.GetSection("Fido2:Origins").Get<string[]>()?.FirstOrDefault()
+    ?? (app.Urls.Any() ? app.Urls.First() : "http://localhost:5050");
 await setupService.CheckHttpsAsync([baseUrl]);
 await setupService.CheckAndBootstrapAsync(baseUrl);
 
