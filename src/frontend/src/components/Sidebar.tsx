@@ -9,20 +9,35 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import StorageIcon from '@mui/icons-material/Storage';
 import SettingsIcon from '@mui/icons-material/Settings';
+import PeopleIcon from '@mui/icons-material/People';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../api/hooks/useAuth';
 
 const DRAWER_WIDTH = 240;
 
-const navItems = [
+interface NavItem {
+  label: string;
+  path: string;
+  icon: React.ReactNode;
+  adminOnly?: boolean;
+}
+
+const navItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
   { label: 'Patterns', path: '/patterns', icon: <ListAltIcon /> },
   { label: 'Data Sources', path: '/data-sources', icon: <StorageIcon /> },
+  { label: 'Users', path: '/users', icon: <PeopleIcon />, adminOnly: true },
   { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
 ];
 
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+
+  const visibleItems = navItems.filter(
+    (item) => !item.adminOnly || user?.isAdmin
+  );
 
   return (
     <Drawer
@@ -38,7 +53,7 @@ export default function Sidebar() {
     >
       <Toolbar />
       <List sx={{ pt: 2 }}>
-        {navItems.map(({ label, path, icon }) => {
+        {visibleItems.map(({ label, path, icon }) => {
           const isActive = location.pathname === path || location.pathname.startsWith(path + '/');
           return (
             <ListItem key={path} disablePadding>
