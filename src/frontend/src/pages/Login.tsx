@@ -1,25 +1,20 @@
-import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
+import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import { usePasskeyLogin } from '../api/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
-  const [password, setPassword] = useState('');
   const login = usePasskeyLogin();
   const navigate = useNavigate();
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handleLogin() {
     login.mutate(undefined, {
-      onSuccess: () => {
-        void navigate('/dashboard');
-      },
+      onSuccess: () => void navigate('/dashboard'),
     });
   }
 
@@ -58,26 +53,16 @@ export default function Login() {
             </Alert>
           )}
 
-          <Box component="form" onSubmit={handleSubmit}>
-            <TextField
-              label="Password"
-              type="password"
-              fullWidth
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-              sx={{ mb: 2 }}
-              disabled={login.isPending}
-            />
-            <Button
-              type="submit"
-              variant="contained"
-              fullWidth
-              disabled={login.isPending || !password}
-            >
-              {login.isPending ? 'Signing in…' : 'Sign In'}
-            </Button>
-          </Box>
+          <Button
+            variant="contained"
+            fullWidth
+            onClick={handleLogin}
+            disabled={login.isPending}
+            startIcon={<FingerprintIcon />}
+            size="large"
+          >
+            {login.isPending ? 'Authenticating…' : 'Sign in with Passkey'}
+          </Button>
         </CardContent>
       </Card>
     </Box>
