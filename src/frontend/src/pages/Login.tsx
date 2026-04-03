@@ -6,17 +6,17 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
-import { useLogin } from '../api/hooks/useAuth';
+import { usePasskeyLogin } from '../api/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
   const [password, setPassword] = useState('');
-  const login = useLogin();
+  const login = usePasskeyLogin();
   const navigate = useNavigate();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    login.mutate(password, {
+    login.mutate(undefined, {
       onSuccess: () => {
         void navigate('/dashboard');
       },
