@@ -27,8 +27,7 @@ public class AuthMiddleware(RequestDelegate next, TokenService tokenService, IOp
             return;
         }
 
-        if (path.Equals("/healthz", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/scalar/", StringComparison.OrdinalIgnoreCase) ||
+        if (path.StartsWith("/scalar/", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/openapi/", StringComparison.OrdinalIgnoreCase))
         {
             await next(context);

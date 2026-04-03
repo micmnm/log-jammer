@@ -83,6 +83,18 @@ var urls = app.Urls.Any() ? app.Urls.ToArray() : ["http://localhost:5050"];
 await setupService.CheckHttpsAsync(urls);
 await setupService.CheckAndBootstrapAsync(urls.First());
 
+// Short-circuit health check before logging/routing middleware to reduce log noise
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Equals("/healthz", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.ContentType = "text/plain";
+        await context.Response.WriteAsync("ok");
+        return;
+    }
+    await next();
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -99,7 +111,6 @@ app.UseMiddleware<AuthMiddleware>();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapControllers();
-app.MapGet("/healthz", () => "ok");
 app.MapFallbackToFile("index.html");
 
 app.Run();
