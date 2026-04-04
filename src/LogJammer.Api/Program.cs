@@ -5,6 +5,7 @@ using LogJammer.Engine;
 using LogJammer.Engine.Data;
 using LogJammer.Engine.Drain;
 using LogJammer.Engine.Processing;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -15,6 +16,10 @@ builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, relo
 // Database
 builder.Services.AddDbContext<LogJammerDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// DataProtection — persist keys to PostgreSQL so they survive container restarts
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<LogJammerDbContext>();
 
 // Auth
 builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("Auth"));

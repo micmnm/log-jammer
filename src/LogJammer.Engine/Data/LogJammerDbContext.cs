@@ -1,10 +1,12 @@
 using LogJammer.Engine.Data.Entities;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace LogJammer.Engine.Data;
 
-public class LogJammerDbContext(DbContextOptions<LogJammerDbContext> options) : DbContext(options)
+public class LogJammerDbContext(DbContextOptions<LogJammerDbContext> options) : DbContext(options), IDataProtectionKeyContext
 {
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
     public DbSet<DataSource> DataSources => Set<DataSource>();
     public DbSet<DrainState> DrainStates => Set<DrainState>();
     public DbSet<LogPattern> LogPatterns => Set<LogPattern>();
