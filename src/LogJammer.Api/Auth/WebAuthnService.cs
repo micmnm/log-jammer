@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LogJammer.Api.Auth;
 
-public class WebAuthnService(IFido2 fido2)
+public class WebAuthnService(IFido2 fido2, ILogger<WebAuthnService> logger)
 {
     public async Task<CredentialCreateOptions> CreateRegistrationOptionsAsync(
         LogJammerDbContext db,
@@ -119,6 +119,12 @@ public class WebAuthnService(IFido2 fido2)
                 StoredSignatureCounter = credential.SignCount,
                 IsUserHandleOwnerOfCredentialIdCallback = (args, ct) =>
                 {
+                    logger.LogInformation(
+                        "UserHandle bytes ({Length}): {Hex} | Expected UserId: {UserId} ({GuidBytes})",
+                        args.UserHandle.Length,
+                        Convert.ToHexString(args.UserHandle),
+                        credential.UserId,
+                        Convert.ToHexString(credential.UserId.ToByteArray()));
                     var userId = new Guid(args.UserHandle);
                     return Task.FromResult(userId == credential.UserId);
                 }
