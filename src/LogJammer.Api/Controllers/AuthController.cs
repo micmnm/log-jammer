@@ -37,14 +37,16 @@ public class AuthController(
         if (setupToken is null)
             return BadRequest(new { message = "Invalid or expired setup token" });
 
+        var userId = Guid.NewGuid();
         var options = await webAuthnService.CreateRegistrationOptionsAsync(
-            db, request.Username, request.DisplayName);
+            db, request.Username, request.DisplayName, userId);
 
         var optionsJson = options.ToJson();
         HttpContext.Session.SetString("fido2.setup.options", optionsJson);
         HttpContext.Session.SetString("fido2.setup.token", request.Token);
         HttpContext.Session.SetString("fido2.setup.username", request.Username);
         HttpContext.Session.SetString("fido2.setup.displayName", request.DisplayName);
+        HttpContext.Session.SetString("fido2.setup.userId", userId.ToString());
 
         return Content(optionsJson, "application/json");
     }
@@ -60,8 +62,9 @@ public class AuthController(
         var token = HttpContext.Session.GetString("fido2.setup.token");
         var username = HttpContext.Session.GetString("fido2.setup.username");
         var displayName = HttpContext.Session.GetString("fido2.setup.displayName");
+        var userIdStr = HttpContext.Session.GetString("fido2.setup.userId");
 
-        if (optionsJson is null || token is null || username is null || displayName is null)
+        if (optionsJson is null || token is null || username is null || displayName is null || userIdStr is null)
             return BadRequest(new { message = "No pending setup registration" });
 
         var options = CredentialCreateOptions.FromJson(optionsJson);
@@ -81,6 +84,7 @@ public class AuthController(
 
             var user = new User
             {
+                Id = Guid.Parse(userIdStr),
                 Username = username,
                 DisplayName = displayName,
                 IsAdmin = true,

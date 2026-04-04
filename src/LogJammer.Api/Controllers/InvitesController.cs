@@ -91,14 +91,16 @@ public class InvitesController(
         if (invite is null)
             return BadRequest(new { message = "Invalid or expired invite" });
 
+        var userId = Guid.NewGuid();
         var options = await webAuthnService.CreateRegistrationOptionsAsync(
-            db, request.Username, request.DisplayName);
+            db, request.Username, request.DisplayName, userId);
 
         var optionsJson = options.ToJson();
         HttpContext.Session.SetString("fido2.invite.options", optionsJson);
         HttpContext.Session.SetString("fido2.invite.token", token);
         HttpContext.Session.SetString("fido2.invite.username", request.Username);
         HttpContext.Session.SetString("fido2.invite.displayName", request.DisplayName);
+        HttpContext.Session.SetString("fido2.invite.userId", userId.ToString());
 
         return Content(optionsJson, "application/json");
     }
@@ -112,9 +114,10 @@ public class InvitesController(
         var savedToken = HttpContext.Session.GetString("fido2.invite.token");
         var username = HttpContext.Session.GetString("fido2.invite.username");
         var displayName = HttpContext.Session.GetString("fido2.invite.displayName");
+        var userIdStr = HttpContext.Session.GetString("fido2.invite.userId");
 
         if (optionsJson is null || savedToken is null || savedToken != token ||
-            username is null || displayName is null)
+            username is null || displayName is null || userIdStr is null)
             return BadRequest(new { message = "No pending invite registration" });
 
         var options = CredentialCreateOptions.FromJson(optionsJson);
@@ -134,6 +137,7 @@ public class InvitesController(
 
             var user = new User
             {
+                Id = Guid.Parse(userIdStr),
                 Username = username,
                 DisplayName = displayName,
                 CanInvite = invite.GrantCanInvite
