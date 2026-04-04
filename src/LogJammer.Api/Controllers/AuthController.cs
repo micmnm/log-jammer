@@ -13,7 +13,8 @@ namespace LogJammer.Api.Controllers;
 public class AuthController(
     LogJammerDbContext db,
     TokenService tokenService,
-    WebAuthnService webAuthnService) : ControllerBase
+    WebAuthnService webAuthnService,
+    ILogger<AuthController> logger) : ControllerBase
 {
     [HttpGet("status")]
     public async Task<ActionResult<AuthStatusResponse>> GetStatus()
@@ -140,8 +141,9 @@ public class AuthController(
             var userInfo = new UserInfo(user.Id, user.Username, user.DisplayName, user.IsAdmin, user.CanInvite);
             return Ok(new LoginResponse(bearerToken, userInfo));
         }
-        catch (Fido2VerificationException)
+        catch (Fido2VerificationException ex)
         {
+            logger.LogWarning(ex, "Passkey login verification failed");
             return BadRequest(new { message = "Passkey verification failed" });
         }
         catch (InvalidOperationException ex)
