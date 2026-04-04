@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiPost } from '../client';
 import { startRegistration } from '@simplewebauthn/browser';
 import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser';
@@ -13,6 +13,7 @@ interface SetupParams {
 
 export function useSetupAdmin() {
   const { setAuth } = useAuth();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ token, username, displayName }: SetupParams) => {
       const options = await apiPost<PublicKeyCredentialCreationOptionsJSON>(
@@ -23,6 +24,7 @@ export function useSetupAdmin() {
       return apiPost<AuthLoginResponse>('/auth/setup/register', attestation);
     },
     onSuccess: (data) => {
+      queryClient.setQueryData(['auth-status'], { initialized: true });
       setAuth(data.token, data.user);
     },
   });

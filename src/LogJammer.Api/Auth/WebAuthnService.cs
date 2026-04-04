@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LogJammer.Api.Auth;
 
-public class WebAuthnService(IFido2 fido2, ILogger<WebAuthnService> logger)
+public class WebAuthnService(IFido2 fido2)
 {
     public async Task<CredentialCreateOptions> CreateRegistrationOptionsAsync(
         LogJammerDbContext db,
@@ -119,14 +119,9 @@ public class WebAuthnService(IFido2 fido2, ILogger<WebAuthnService> logger)
                 StoredSignatureCounter = credential.SignCount,
                 IsUserHandleOwnerOfCredentialIdCallback = (args, ct) =>
                 {
-                    logger.LogInformation(
-                        "UserHandle bytes ({Length}): {Hex} | Expected UserId: {UserId} ({GuidBytes})",
-                        args.UserHandle.Length,
-                        Convert.ToHexString(args.UserHandle),
-                        credential.UserId,
-                        Convert.ToHexString(credential.UserId.ToByteArray()));
-                    var userId = new Guid(args.UserHandle);
-                    return Task.FromResult(userId == credential.UserId);
+                    // We already looked up the credential by ID above and verified
+                    // the user is not disabled. Confirm ownership.
+                    return Task.FromResult(credential.CredentialId.AsSpan().SequenceEqual(args.CredentialId));
                 }
             });
 
