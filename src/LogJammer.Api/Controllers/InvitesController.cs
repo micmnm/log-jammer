@@ -139,11 +139,11 @@ public class InvitesController(
                 CanInvite = invite.GrantCanInvite
             };
 
-            credential.UserId = user.Id;
+            credential.User = user;
             credential.DeviceInfo = Request.Headers.UserAgent.ToString();
 
             db.Users.Add(user);
-            db.UserCredentials.Add(credential);
+            user.Credentials.Add(credential);
             invite.UsedByUserId = user.Id;
             invite.UsedAt = now;
             await db.SaveChangesAsync();

@@ -86,11 +86,11 @@ public class AuthController(
                 CanInvite = true
             };
 
-            credential.UserId = user.Id;
+            credential.User = user;
             credential.DeviceInfo = Request.Headers.UserAgent.ToString();
 
             db.Users.Add(user);
-            db.UserCredentials.Add(credential);
+            user.Credentials.Add(credential);
             setupToken.UsedAt = now;
             await db.SaveChangesAsync();
 
