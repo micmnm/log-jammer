@@ -10,7 +10,7 @@ using Serilog.Formatting;
 namespace LogJammer.Api;
 
 /// <summary>
-/// Logs: one ECS JSON object per line on stdout (a node agent ships them).
+/// Logs: one ECS JSON object per line on standard output, for collection.
 /// Traces and runtime metrics: OTLP over HTTP, only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
 /// </summary>
 public static class Observability
@@ -19,6 +19,14 @@ public static class Observability
 
     public static bool TracingEnabled =>
         !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(EndpointVariable));
+
+    /// <summary>OTLP exporter headers for a bearer token; null (no header) when the token is empty.</summary>
+    public static string? AuthHeaders(string? token) =>
+        string.IsNullOrEmpty(token) ? null : $"Authorization=Bearer {token}";
+
+    /// <summary>Whether a request path is traced: false for the paths in <paramref name="untracedPaths"/> (segment match, any casing).</summary>
+    public static bool IsTraced(PathString path, string[] untracedPaths) =>
+        !untracedPaths.Any(p => path.StartsWithSegments(p));
 
     public static ITextFormatter CreateLogFormatter(string serviceName, string? environment) =>
         new EcsTextFormatter(new EcsTextFormatterConfiguration
@@ -56,9 +64,7 @@ public static class Observability
             // The endpoint comes from OTEL_EXPORTER_OTLP_ENDPOINT; the SDK appends /v1/traces and /v1/metrics.
             options.Protocol = OtlpExportProtocol.HttpProtobuf;
             options.TimeoutMilliseconds = 3000;
-            var token = Environment.GetEnvironmentVariable("ELASTIC_APM_SECRET_TOKEN");
-            if (!string.IsNullOrEmpty(token))
-                options.Headers = $"Authorization=Bearer {token}";
+            options.Headers = AuthHeaders(Environment.GetEnvironmentVariable("ELASTIC_APM_SECRET_TOKEN"));
         }
 
         builder.Services.AddOpenTelemetry()
@@ -72,7 +78,7 @@ public static class Observability
                 .AddAspNetCoreInstrumentation(options =>
                 {
                     options.RecordException = true;
-                    options.Filter = http => !untracedPaths.Any(p => http.Request.Path.StartsWithSegments(p));
+                    options.Filter = http => IsTraced(http.Request.Path, untracedPaths);
                 })
                 .AddHttpClientInstrumentation()
                 .AddOtlpExporter(ConfigureOtlp))
