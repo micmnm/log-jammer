@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Trace;
 using Serilog.Events;
@@ -86,5 +87,31 @@ public class ObservabilityTests
         {
             Environment.SetEnvironmentVariable(Observability.EndpointVariable, null);
         }
+    }
+
+    [Theory]
+    [InlineData("/healthz", false)]
+    [InlineData("/api/invites", false)]
+    [InlineData("/api/invites/abc123/register", false)]
+    [InlineData("/API/Invites/abc123/Complete", false)]
+    [InlineData("/api/logs", true)]
+    [InlineData("/api/invitesx", true)]
+    public void Health_and_invite_paths_are_not_traced(string path, bool traced)
+    {
+        Assert.Equal(traced, Observability.IsTraced(new PathString(path), ["/healthz", "/api/invites"]));
+    }
+
+    [Fact]
+    public void Exporter_sends_the_token_as_a_bearer_header()
+    {
+        Assert.Equal("Authorization=Bearer dummy-token", Observability.AuthHeaders("dummy-token"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Exporter_sends_no_header_when_the_token_is_empty(string? token)
+    {
+        Assert.Null(Observability.AuthHeaders(token));
     }
 }
