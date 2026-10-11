@@ -1,4 +1,5 @@
 using Fido2NetLib;
+using LogJammer.Api;
 using LogJammer.Api.Auth;
 using LogJammer.Api.BackgroundServices;
 using LogJammer.Engine;
@@ -12,6 +13,10 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
+// Logs: ECS JSON on stdout. Traces: OTLP, only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+// /api/invites carries the invite token in the URL path, so it is not traced.
+builder.AddObservability("log-jammer", "/healthz", "/api/invites");
 
 // Database
 builder.Services.AddDbContext<LogJammerDbContext>(options =>
