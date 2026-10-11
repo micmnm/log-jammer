@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Trace;
 using Serilog.Events;
 using Serilog.Parsing;
@@ -113,5 +114,18 @@ public class ObservabilityTests
     public void Exporter_sends_no_header_when_the_token_is_empty(string? token)
     {
         Assert.Null(Observability.AuthHeaders(token));
+    }
+
+    [Theory]
+    [InlineData("grpc", OtlpExportProtocol.Grpc)]
+    [InlineData("GRPC", OtlpExportProtocol.Grpc)]
+    [InlineData(" grpc ", OtlpExportProtocol.Grpc)]
+    [InlineData(null, OtlpExportProtocol.HttpProtobuf)]
+    [InlineData("", OtlpExportProtocol.HttpProtobuf)]
+    [InlineData("http/protobuf", OtlpExportProtocol.HttpProtobuf)]
+    [InlineData("carrier-pigeon", OtlpExportProtocol.HttpProtobuf)]
+    public void Exporter_protocol_is_grpc_only_when_asked(string? value, OtlpExportProtocol expected)
+    {
+        Assert.Equal(expected, Observability.ProtocolFor(value));
     }
 }

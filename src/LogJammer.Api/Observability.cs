@@ -11,7 +11,7 @@ namespace LogJammer.Api;
 
 /// <summary>
 /// Logs: one ECS JSON object per line on standard output, for collection.
-/// Traces and runtime metrics: OTLP over HTTP, only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+/// Traces and runtime metrics: OTLP over HTTP (or gRPC with OTEL_EXPORTER_OTLP_PROTOCOL=grpc), only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
 /// </summary>
 public static class Observability
 {
@@ -23,6 +23,12 @@ public static class Observability
     /// <summary>OTLP exporter headers for a bearer token; null (no header) when the token is empty.</summary>
     public static string? AuthHeaders(string? token) =>
         string.IsNullOrEmpty(token) ? null : $"Authorization=Bearer {token}";
+
+    /// <summary>OTLP protocol for OTEL_EXPORTER_OTLP_PROTOCOL: "grpc" (any casing) selects gRPC; anything else keeps HTTP/protobuf.</summary>
+    public static OtlpExportProtocol ProtocolFor(string? value) =>
+        value?.Trim().Equals("grpc", StringComparison.OrdinalIgnoreCase) == true
+            ? OtlpExportProtocol.Grpc
+            : OtlpExportProtocol.HttpProtobuf;
 
     /// <summary>Whether a request path is traced: false for the paths in <paramref name="untracedPaths"/> (segment match, any casing).</summary>
     public static bool IsTraced(PathString path, string[] untracedPaths) =>
@@ -61,8 +67,9 @@ public static class Observability
 
         void ConfigureOtlp(OtlpExporterOptions options)
         {
-            // The endpoint comes from OTEL_EXPORTER_OTLP_ENDPOINT; the SDK appends /v1/traces and /v1/metrics.
-            options.Protocol = OtlpExportProtocol.HttpProtobuf;
+            // The endpoint comes from OTEL_EXPORTER_OTLP_ENDPOINT: used as given with gRPC;
+            // with HTTP the SDK appends /v1/traces and /v1/metrics.
+            options.Protocol = ProtocolFor(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL"));
             options.TimeoutMilliseconds = 3000;
             options.Headers = AuthHeaders(Environment.GetEnvironmentVariable("ELASTIC_APM_SECRET_TOKEN"));
         }
