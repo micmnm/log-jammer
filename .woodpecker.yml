@@ -4,9 +4,11 @@
 # Branch: main - Build, push Docker image to GHCR, auto-deploy to LKE
 # =============================================================================
 
+# Paused 2026-11-19: app is parked (scaled to 0). Pushes no longer build or deploy;
+# run manually from the Woodpecker UI, or restore `event: [push, manual]` to resume.
 when:
   branch: [main, master]
-  event: [push, manual]
+  event: [manual]
 
 variables:
   - &dotnet_image mcr.microsoft.com/dotnet/sdk:10.0
