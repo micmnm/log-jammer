@@ -2,6 +2,7 @@
   <ItemGroup>
     <PackageReference Include="Fido2" Version="4.0.0" />
     <PackageReference Include="Fido2.AspNet" Version="4.0.0" />
+    <PackageReference Include="System.Formats.Cbor" Version="10.0.15" NoWarn="NU1510" /> <!-- override Fido2 transitive 9.0.0 (GHSA-vmv3-wvjp-wqpj) -->
     <PackageReference Include="Microsoft.Bcl.Memory" Version="9.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
